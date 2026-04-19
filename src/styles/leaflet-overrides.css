@@ -1,0 +1,62 @@
+/**
+ * Leaflet Z-Index Overrides for CURA
+ * Ensures custom tooltips and popups render above map layers
+ */
+
+/* Leaflet pane z-index hierarchy */
+.leaflet-pane { z-index: 400; }
+.leaflet-tile-pane { z-index: 2; }
+.leaflet-objects-pane { z-index: 30; }
+.leaflet-shadow-pane { z-index: 5; }
+.leaflet-overlay-pane { z-index: 7; }
+.leaflet-marker-pane { z-index: 11; }
+.leaflet-tooltip-pane { z-index: 650; }
+.leaflet-popup-pane { z-index: 700; }
+
+/* Fix for custom portaled tooltips - ensure they're always visible */
+/* Portal tooltips render at document.body level */
+:root {
+  --tooltip-z-index: 9999;
+}
+
+/* Prevent Leaflet from interfering with fixed positioning */
+.leaflet-container {
+  font-family: inherit;
+}
+
+/* Ensure map doesn't clip content */
+.leaflet-container {
+  position: relative;
+  overflow: visible !important; /* Override any inline overflow */
+}
+
+/* Custom heatmap tooltip styling for portal rendering */
+[style*="z-index: 9999"] {
+  pointer-events: auto;
+  will-change: transform;
+  contain: layout style paint;
+}
+
+/* Smooth animation support */
+@supports (animation: fade-in) {
+  [style*="z-index: 9999"] {
+    animation: fadeInZoom 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+}
+
+@keyframes fadeInZoom {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+  }
+}
+
+/* Prevent hover state interference */
+.leaflet-marker-icon:hover,
+.leaflet-popup:hover {
+  z-index: inherit;
+}
