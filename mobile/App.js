@@ -21,17 +21,18 @@ const Tab = createBottomTabNavigator();
 function MainTabs() {
   return (
     <Tab.Navigator
+      initialRouteName="Map"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
 
-          if (route.name === 'Home') {
-            iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'Alerts') {
-            iconName = focused ? 'notifications' : 'notifications-outline';
+          if (route.name === 'Status') {
+            iconName = focused ? 'pulse' : 'pulse-outline';
           } else if (route.name === 'Map') {
             iconName = focused ? 'map' : 'map-outline';
+          } else if (route.name === 'Alerts') {
+            iconName = focused ? 'notifications' : 'notifications-outline';
           } else if (route.name === 'Settings') {
             iconName = focused ? 'settings' : 'settings-outline';
           }
@@ -44,15 +45,19 @@ function MainTabs() {
           backgroundColor: COLORS.white,
           borderTopColor: COLORS.slate200,
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
+          height: 64,
+          paddingBottom: 10,
           paddingTop: 8,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
         },
       })}
     >
-      <Tab.Screen name="Home" component={DashboardScreen} />
-      <Tab.Screen name="Alerts" component={AlertsScreen} />
+      <Tab.Screen name="Status" component={DashboardScreen} />
       <Tab.Screen name="Map" component={MapScreen} />
+      <Tab.Screen name="Alerts" component={AlertsScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
