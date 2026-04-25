@@ -24,7 +24,7 @@ import {
 const CATEGORY_COLOR_MAP = {
   fire:       { bg: 'bg-red-600',      shadow: 'shadow-red-900/30',      badgeBg: 'bg-white',      badgeText: 'text-red-600',      gradientBg: 'bg-gradient-to-b from-red-950 via-red-900 to-slate-950' },
   medical:    { bg: 'bg-blue-600',     shadow: 'shadow-blue-900/30',     badgeBg: 'bg-white',      badgeText: 'text-blue-600',     gradientBg: 'bg-gradient-to-b from-blue-950 via-blue-900 to-slate-950' },
-  accidents:  { bg: 'bg-amber-500',    shadow: 'shadow-amber-900/30',    badgeBg: 'bg-slate-900',  badgeText: 'text-amber-500',    gradientBg: 'bg-gradient-to-b from-amber-950 via-amber-900 to-slate-950' },
+  accidents:  { bg: 'bg-amber-500',    shadow: 'shadow-amber-900/30',    badgeBg: 'bg-white',      badgeText: 'text-amber-500',    gradientBg: 'bg-gradient-to-b from-amber-950 via-amber-900 to-slate-950' },
   rescue:     { bg: 'bg-purple-600',   shadow: 'shadow-purple-900/30',   badgeBg: 'bg-white',      badgeText: 'text-purple-600',   gradientBg: 'bg-gradient-to-b from-purple-950 via-purple-900 to-slate-950' },
   dashboard:  { bg: 'bg-emerald-600',  shadow: 'shadow-emerald-900/30',  badgeBg: 'bg-white',      badgeText: 'text-emerald-600',  gradientBg: 'bg-gradient-to-b from-emerald-950 via-emerald-900 to-slate-950' },
   system:     { bg: 'bg-emerald-600',  shadow: 'shadow-emerald-900/30',  badgeBg: 'bg-white',      badgeText: 'text-emerald-600',  gradientBg: 'bg-gradient-to-b from-emerald-950 via-emerald-900 to-slate-950' },
@@ -287,7 +287,10 @@ const Sidebar = ({ collapsed, onToggle }) => {
                     <div className="text-xs text-slate-400">admin@cura.gov.ph</div>
                   </div>
                   <button
-                    onClick={() => setShowUserMenu(false)}
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      navigate('/settings');
+                    }}
                     className="w-full flex items-center space-x-2 px-3 py-2.5 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
                   >
                     <Cog6ToothIcon className="w-4 h-4" />
@@ -316,6 +319,16 @@ const Sidebar = ({ collapsed, onToggle }) => {
                   <div className="p-3 border-b border-slate-700">
                     <div className="text-sm font-semibold text-white">Admin User</div>
                   </div>
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      navigate('/settings');
+                    }}
+                    className="w-full flex items-center space-x-2 px-3 py-2.5 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                  >
+                    <Cog6ToothIcon className="w-4 h-4" />
+                    <span className="text-sm">Settings</span>
+                  </button>
                   <button
                     onClick={handleLogout}
                     className="w-full flex items-center space-x-2 px-3 py-2.5 text-red-400 hover:bg-red-900/30 transition-colors"

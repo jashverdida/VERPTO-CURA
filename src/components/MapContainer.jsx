@@ -6,6 +6,8 @@ import {
   MapIcon,
   MapPinIcon,
   ClockIcon,
+  ArrowsPointingOutIcon,
+  ArrowsPointingInIcon,
 } from '@heroicons/react/24/outline';
 import HeatmapOverlay from './HeatmapOverlay';
 import HeatmapTooltipPortal from './HeatmapTooltipPortal';
@@ -136,15 +138,52 @@ const getMarkerColor = (type, priority) => {
 const MapContainerComponent = () => {
   const [selectedReport, setSelectedReport] = useState(null);
   const [hoveredHotspot, setHoveredHotspot] = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const mapWrapperRef = useRef(null);
+  const mapContentRef = useRef(null);
 
   // Metro Manila center coordinates
   const center = [14.5994, 121.0437];
 
+  const toggleFullscreen = () => {
+    if (!mapWrapperRef.current) return;
+
+    if (!isFullscreen) {
+      if (mapWrapperRef.current.requestFullscreen) {
+        mapWrapperRef.current.requestFullscreen();
+      } else if (mapWrapperRef.current.webkitRequestFullscreen) {
+        mapWrapperRef.current.webkitRequestFullscreen();
+      }
+      setIsFullscreen(true);
+    } else {
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else if (document.webkitFullscreenElement) {
+        document.webkitExitFullscreen();
+      }
+      setIsFullscreen(false);
+    }
+  };
+
+  // Listen for fullscreen changes
+  React.useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement || !!document.webkitFullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
   return (
-    <div className="h-full w-full flex flex-col bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-      {/* Map Header */}
-      <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-white z-10 relative flex-shrink-0">
+    <div className="h-full w-full flex flex-col bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden" ref={mapWrapperRef}>
+      {/* Map Header - Always in front */}
+      <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-white z-20 relative flex-shrink-0">
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center shadow-lg">
             <MapIcon className="w-5 h-5 text-white" />
@@ -155,14 +194,30 @@ const MapContainerComponent = () => {
           </div>
         </div>
 
-        <div className="flex items-center space-x-2 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200 relative z-10">
-          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-          <span className="text-xs font-semibold text-emerald-700">Live</span>
+        <div className="flex items-center space-x-3">
+          {/* Fullscreen Button */}
+          <button
+            onClick={toggleFullscreen}
+            className="p-2 hover:bg-slate-100 rounded-lg transition-colors duration-200 flex items-center justify-center"
+            title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+          >
+            {isFullscreen ? (
+              <ArrowsPointingInIcon className="w-5 h-5 text-slate-600" />
+            ) : (
+              <ArrowsPointingOutIcon className="w-5 h-5 text-slate-600" />
+            )}
+          </button>
+
+          {/* Live Status */}
+          <div className="flex items-center space-x-2 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200 relative z-20">
+            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+            <span className="text-xs font-semibold text-emerald-700">Live</span>
+          </div>
         </div>
       </div>
 
       {/* Leaflet Map Container - Strictly Constrained */}
-      <div className="flex-1 min-w-0 min-h-0 relative" ref={mapWrapperRef}>
+      <div className="flex-1 min-w-0 min-h-0 relative z-10" ref={mapContentRef}>
         <LeafletMapContainer
           center={center}
           zoom={12}
@@ -241,10 +296,10 @@ const MapContainerComponent = () => {
       </div>
 
       {/* Heatmap Tooltip Portal - Renders to document.body for absolute freedom */}
-      <HeatmapTooltipPortal hotspot={hoveredHotspot} onHotspotChange={setHoveredHotspot} mapRef={mapWrapperRef} />
+      <HeatmapTooltipPortal hotspot={hoveredHotspot} onHotspotChange={setHoveredHotspot} mapRef={mapContentRef} />
 
-      {/* Map Footer - Legend */}
-      <div className="p-3 border-t border-slate-200 bg-slate-50">
+      {/* Map Footer - Legend - Always in front */}
+      <div className="p-3 border-t border-slate-200 bg-slate-50 z-20 relative flex-shrink-0">
         <div className="flex items-center justify-between text-xs flex-wrap gap-4">
           <div className="flex items-center space-x-4">
             <div className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Incident Markers:</div>

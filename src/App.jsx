@@ -8,6 +8,7 @@ import RoadAccidents from './pages/RoadAccidents';
 import RescueOperations from './pages/RescueOperations';
 import SystemStatus from './pages/SystemStatus';
 import StationManagement from './pages/StationManagement';
+import UserSettings from './pages/UserSettings';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import './styles/leaflet-overrides.css';
@@ -55,6 +56,7 @@ function App() {
               <Route path="/rescue" element={<RescueOperations />} />
               <Route path="/system" element={<SystemStatus />} />
               <Route path="/stations" element={<StationManagement />} />
+              <Route path="/settings" element={<UserSettings />} />
             </Routes>
           </div>
         </main>
