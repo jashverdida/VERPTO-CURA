@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from './constants/theme';
 
+// Existing Screens
 import SplashScreen from './screens/SplashScreen';
 import LoginScreen from './screens/LoginScreen';
 import DashboardScreen from './screens/DashboardScreen';
@@ -14,6 +15,11 @@ import AlertsScreen from './screens/AlertsScreen';
 import MapScreen from './screens/MapScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import CameraScreen from './screens/CameraScreen';
+
+// Responder Screens
+import ResponderDispatchScreen from './screens/ResponderDispatchScreen';
+import ResponderCommsScreen from './screens/ResponderCommsScreen';
+import ResponderLogsScreen from './screens/ResponderLogsScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -63,6 +69,52 @@ function MainTabs() {
   );
 }
 
+function ResponderTabs() {
+  return (
+    <Tab.Navigator
+      initialRouteName="Dispatch"
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName;
+
+          if (route.name === 'Dispatch') {
+            iconName = focused ? 'navigate' : 'navigate-outline';
+          } else if (route.name === 'Comms') {
+            iconName = focused ? 'radio' : 'radio-outline';
+          } else if (route.name === 'Logs') {
+            iconName = focused ? 'document-text' : 'document-text-outline';
+          } else if (route.name === 'Settings') {
+            iconName = focused ? 'settings' : 'settings-outline';
+          }
+
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: COLORS.warning, // Yellow for tactical visibility
+        tabBarInactiveTintColor: COLORS.slate500,
+        tabBarStyle: {
+          backgroundColor: '#121212', // Dark tactical theme
+          borderTopColor: '#333',
+          borderTopWidth: 2,
+          height: 70, // Slightly taller for glove-friendliness
+          paddingBottom: 15,
+          paddingTop: 10,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '800',
+          letterSpacing: 1,
+        },
+      })}
+    >
+      <Tab.Screen name="Dispatch" component={ResponderDispatchScreen} />
+      <Tab.Screen name="Comms" component={ResponderCommsScreen} />
+      <Tab.Screen name="Logs" component={ResponderLogsScreen} />
+      <Tab.Screen name="Settings" component={SettingsScreen} />
+    </Tab.Navigator>
+  );
+}
+
 export default function App() {
   return (
     <NavigationContainer>
@@ -88,6 +140,11 @@ export default function App() {
         <Stack.Screen
           name="MainTabs"
           component={MainTabs}
+          options={{ animation: 'slide_from_bottom' }}
+        />
+        <Stack.Screen
+          name="ResponderTabs"
+          component={ResponderTabs}
           options={{ animation: 'slide_from_bottom' }}
         />
         <Stack.Screen

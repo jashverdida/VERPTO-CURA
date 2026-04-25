@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,15 @@ import {
   Animated,
   StatusBar,
   Platform,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SHADOWS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constants/theme';
 
 export default function LoginScreen({ navigation }) {
   const loginScale = useRef(new Animated.Value(1)).current;
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
 
   const handleLoginPressIn = () => {
     Animated.spring(loginScale, {
@@ -31,8 +34,14 @@ export default function LoginScreen({ navigation }) {
   };
 
   const handleLogin = () => {
-    // Navigate to the Main Tabs where Dashboard is the Home tab
-    navigation.replace('MainTabs');
+    const email = identifier.toLowerCase().trim();
+    if (email === 'responders@gmail.com' && password === 'responder123') {
+      navigation.replace('ResponderTabs');
+    } else if (email === 'citizen@gmail.com' && password === 'citizen123') {
+      navigation.replace('MainTabs');
+    } else {
+      Alert.alert('Login Failed', 'Invalid credentials. Please try again.');
+    }
   };
 
   return (
@@ -49,14 +58,17 @@ export default function LoginScreen({ navigation }) {
 
       <View style={styles.formContainer}>
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Phone Number</Text>
+          <Text style={styles.label}>Phone / Email</Text>
           <View style={styles.inputContainer}>
-            <Ionicons name="call-outline" size={20} color={COLORS.slate400} style={styles.inputIcon} />
+            <Ionicons name="person-outline" size={20} color={COLORS.slate400} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Enter your phone number"
+              placeholder="Enter your phone or email"
               placeholderTextColor={COLORS.slate400}
-              keyboardType="phone-pad"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={identifier}
+              onChangeText={setIdentifier}
             />
           </View>
         </View>
@@ -70,6 +82,8 @@ export default function LoginScreen({ navigation }) {
               placeholder="Enter your password"
               placeholderTextColor={COLORS.slate400}
               secureTextEntry
+              value={password}
+              onChangeText={setPassword}
             />
           </View>
         </View>
