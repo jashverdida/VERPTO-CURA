@@ -133,13 +133,18 @@ const Dashboard = () => {
 
       {/* Hero Section - Transforms with scroll */}
       <div
-        className="bg-gradient-to-r from-slate-900 via-emerald-900 to-slate-900 shadow-2xl flex-shrink-0 transition-all duration-100 border-b border-emerald-700/50"
+        className="relative bg-gradient-to-r from-slate-900 via-emerald-900 to-slate-900 shadow-2xl flex-shrink-0 transition-all duration-100 border-b border-emerald-700/50 overflow-hidden"
         style={{
           padding: `${Math.max(12, 48 - scrollPosition * 0.2)}px ${Math.max(8, 32 - scrollPosition * 0.1)}px`,
           minHeight: `${Math.max(70, 200 - scrollPosition * 0.5)}px`
         }}
       >
-        <div className="flex items-center justify-between gap-4">
+        {/* Animated Background Orbs */}
+        <div className="absolute top-0 left-1/4 w-[300px] h-[300px] bg-emerald-500/20 rounded-full blur-[80px] animate-blob pointer-events-none"></div>
+        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-teal-500/10 rounded-full blur-[100px] animate-blob pointer-events-none" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.15] mix-blend-overlay pointer-events-none"></div>
+
+        <div className="relative z-10 flex items-center justify-between gap-4">
           {/* Left: Hero Branding */}
           <div className="flex-1 flex items-center gap-4" style={{opacity: Math.max(0.7, 1 - scrollPosition * 0.01)}}>
             {/* Accent accent line when compressed */}
@@ -200,23 +205,33 @@ const Dashboard = () => {
                 transition: 'all 100ms linear'
               }}
             >
-              {/* Hexagon background */}
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-3xl" style={{clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)'}}></div>
+              {/* Outer Glow Hexagon (Pulse) */}
+              <div className="absolute -inset-4 bg-emerald-500/20 rounded-3xl blur-xl animate-pulse" style={{clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)'}}></div>
+
+              {/* Hexagon background with gradient and slight shadow */}
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 via-emerald-600 to-emerald-800 shadow-[inset_0_0_20px_rgba(0,0,0,0.3)] rounded-3xl" style={{clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)'}}></div>
+
+              {/* Inner glowing core */}
+              <div className="absolute inset-0 bg-emerald-400/20 rounded-3xl animate-pulse" style={{clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)'}}></div>
+
+              {/* Rotating abstract border elements */}
+              <div className="absolute -inset-1 rounded-3xl border border-emerald-300/30 animate-[spin_10s_linear_infinite]" style={{clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)'}}></div>
+              <div className="absolute -inset-2 rounded-3xl border-2 border-emerald-400/20 border-dashed animate-[spin_15s_linear_infinite_reverse]" style={{clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)'}}></div>
 
               {/* Hexagon content */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center rounded-3xl" style={{clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)'}}>
-                <div className="text-white text-center">
-                  <div className="font-black mb-1" style={{fontSize: `${Math.max(12, 48 - scrollPosition * 0.2)}px`, lineHeight: '1'}}
+              <div className="absolute inset-0 flex flex-col items-center justify-center rounded-3xl z-10" style={{clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)'}}>
+                <div className="text-white text-center drop-shadow-md">
+                  <div className="font-black mb-1 bg-clip-text text-transparent bg-gradient-to-b from-white to-emerald-100" style={{fontSize: `${Math.max(12, 48 - scrollPosition * 0.2)}px`, lineHeight: '1'}}
                   >AI</div>
-                  <div className="font-semibold tracking-wider opacity-90" style={{fontSize: `${Math.max(6, 14 - scrollPosition * 0.08)}px`, lineHeight: '1'}}
+                  <div className="font-semibold tracking-widest text-emerald-50" style={{fontSize: `${Math.max(6, 14 - scrollPosition * 0.08)}px`, lineHeight: '1'}}
                   >POWERED</div>
-                  <div className="mt-1 opacity-75 px-2" style={{fontSize: `${Math.max(4, 12 - scrollPosition * 0.06)}px`, lineHeight: '1'}}
+                  <div className="mt-1 opacity-90 text-emerald-200 uppercase tracking-widest font-bold" style={{fontSize: `${Math.max(4, 10 - scrollPosition * 0.06)}px`, lineHeight: '1'}}
                   >Edge AI</div>
                 </div>
               </div>
 
-              {/* Animated border */}
-              <div className="absolute inset-0 rounded-3xl border-2 border-emerald-300 opacity-50" style={{clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)'}}></div>
+              {/* Overlay sheen */}
+              <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent rounded-3xl pointer-events-none" style={{clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)'}}></div>
             </div>
           </div>
         </div>
