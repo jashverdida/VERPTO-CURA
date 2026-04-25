@@ -67,9 +67,9 @@ export default function SplashScreen({ navigation }) {
       ])
     ).start();
 
-    // Navigate to Dashboard after 2.5 seconds
+    // Navigate to Login after 2.5 seconds
     const timer = setTimeout(() => {
-      navigation.replace('Dashboard');
+      navigation.replace('Login');
     }, 2500);
 
     return () => clearTimeout(timer);

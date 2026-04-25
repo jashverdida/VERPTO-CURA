@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,33 +7,39 @@ import {
   Animated,
   Platform,
   StatusBar,
+  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SHADOWS, BORDER_RADIUS, SPACING } from '../constants/theme';
+import { COLORS, SHADOWS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constants/theme';
 import IncidentModal from '../components/IncidentModal';
-import DummyMap from '../components/DummyMap';
+
+const MOCK_INCIDENTS = [
+  { id: '1', type: 'Medical', title: 'Cardiac Arrest', location: '123 Main St', time: '2 min ago', distance: '0.2 mi', status: 'Active', category: 'Nearby', priority: 'High' },
+  { id: '2', type: 'Fire', title: 'Building Fire', location: '456 Elm St', time: '5 min ago', distance: '1.5 mi', status: 'Active', category: 'All', priority: 'Critical' },
+  { id: '3', type: 'Accident', title: 'Vehicle Collision', location: '789 Oak Ave', time: '10 min ago', distance: '0.0 mi', status: 'Assigned', category: 'Own Emergency', priority: 'High' },
+  { id: '4', type: 'Security', title: 'Intrusion Alarm', location: '101 Pine Rd', time: '1 hr ago', distance: '3.2 mi', status: 'Resolved', category: 'All', priority: 'Low' },
+  { id: '5', type: 'Medical', title: 'Fall Injury', location: '202 Maple Dr', time: '15 min ago', distance: '0.5 mi', status: 'Active', category: 'Nearby', priority: 'Medium' },
+];
+
+const TABS = ['Own Emergency', 'Nearby', 'All'];
 
 export default function DashboardScreen({ navigation }) {
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const fabScale = useRef(new Animated.Value(1)).current;
+  const [activeTab, setActiveTab] = useState('All');
+  const reportScale = useRef(new Animated.Value(1)).current;
 
-  const handleMarkerPress = (incident) => {
-    setSelectedIncident(incident);
-    setModalVisible(true);
-  };
-
-  const handleFabPressIn = () => {
-    Animated.spring(fabScale, {
-      toValue: 0.9,
+  const handleReportPressIn = () => {
+    Animated.spring(reportScale, {
+      toValue: 0.96,
       useNativeDriver: true,
     }).start();
   };
 
-  const handleFabPressOut = () => {
-    Animated.spring(fabScale, {
+  const handleReportPressOut = () => {
+    Animated.spring(reportScale, {
       toValue: 1,
-      friction: 3,
+      friction: 4,
       useNativeDriver: true,
     }).start();
   };
@@ -42,9 +48,59 @@ export default function DashboardScreen({ navigation }) {
     navigation.navigate('Camera');
   };
 
+  const handleIncidentPress = (incident) => {
+    setSelectedIncident(incident);
+    setModalVisible(true);
+  };
+
   const closeModal = () => {
     setModalVisible(false);
     setSelectedIncident(null);
+  };
+
+  const filteredIncidents = useMemo(() => {
+    if (activeTab === 'All') return MOCK_INCIDENTS;
+    return MOCK_INCIDENTS.filter(inc => inc.category === activeTab);
+  }, [activeTab]);
+
+  const renderIncident = ({ item }) => {
+    let iconName = 'alert-circle';
+    let iconColor = COLORS.slate500;
+
+    if (item.type === 'Medical') { iconName = 'medical'; iconColor = COLORS.medicalBlue; }
+    else if (item.type === 'Fire') { iconName = 'flame'; iconColor = COLORS.fireRed; }
+    else if (item.type === 'Accident') { iconName = 'car'; iconColor = COLORS.accidentOrange; }
+    else if (item.type === 'Security') { iconName = 'shield-half'; iconColor = COLORS.rescueYellow; }
+
+    return (
+      <TouchableOpacity 
+        style={styles.incidentCard} 
+        onPress={() => handleIncidentPress(item)}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.iconContainer, { backgroundColor: iconColor + '20' }]}>
+          <Ionicons name={iconName} size={24} color={iconColor} />
+        </View>
+        <View style={styles.incidentInfo}>
+          <Text style={styles.incidentTitle}>{item.title}</Text>
+          <Text style={styles.incidentLocation}>
+            <Ionicons name="location-outline" size={12} color={COLORS.slate400} /> {item.location} • {item.distance}
+          </Text>
+        </View>
+        <View style={styles.incidentMeta}>
+          <Text style={styles.incidentTime}>{item.time}</Text>
+          <View style={[
+            styles.statusBadge, 
+            { backgroundColor: item.status === 'Active' ? COLORS.fireRed + '20' : COLORS.emerald + '20' }
+          ]}>
+            <Text style={[
+              styles.statusText,
+              { color: item.status === 'Active' ? COLORS.fireRed : COLORS.emerald }
+            ]}>{item.status}</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   return (
@@ -75,54 +131,53 @@ export default function DashboardScreen({ navigation }) {
         </View>
       </View>
 
-      {/* Stats Bar */}
-      <View style={styles.statsBar}>
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>6</Text>
-          <Text style={styles.statLabel}>Active</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={[styles.statNumber, { color: COLORS.fireRed }]}>2</Text>
-          <Text style={styles.statLabel}>Critical</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={[styles.statNumber, { color: COLORS.emerald }]}>12</Text>
-          <Text style={styles.statLabel}>Units</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={[styles.statNumber, { color: COLORS.medicalBlue }]}>99.8%</Text>
-          <Text style={styles.statLabel}>Uptime</Text>
-        </View>
+      {/* Hero Button */}
+      <View style={styles.heroContainer}>
+        <Animated.View style={{ transform: [{ scale: reportScale }] }}>
+          <TouchableOpacity
+            style={styles.heroButton}
+            onPressIn={handleReportPressIn}
+            onPressOut={handleReportPressOut}
+            onPress={handleReportPress}
+            activeOpacity={1}
+          >
+            <View style={styles.heroButtonInner}>
+              <Ionicons name="warning" size={32} color={COLORS.white} style={styles.heroIcon} />
+              <View>
+                <Text style={styles.heroTitle}>REPORT EMERGENCY</Text>
+                <Text style={styles.heroSubtitle}>Tap to open camera and broadcast</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
       </View>
 
-      {/* Dummy Map */}
-      <View style={styles.mapContainer}>
-        <DummyMap onMarkerPress={handleMarkerPress} />
+      {/* Sticky Tabs */}
+      <View style={styles.tabRow}>
+        {TABS.map((tab) => {
+          const isActive = activeTab === tab;
+          return (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.tab, isActive && styles.activeTab]}
+              onPress={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.tabText, isActive && styles.activeTabText]}>
+                {tab}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      {/* Floating Action Button */}
-      <Animated.View
-        style={[
-          styles.fabContainer,
-          { transform: [{ scale: fabScale }] },
-        ]}
-      >
-        <TouchableOpacity
-          style={styles.fab}
-          onPressIn={handleFabPressIn}
-          onPressOut={handleFabPressOut}
-          onPress={handleReportPress}
-          activeOpacity={1}
-        >
-          <View style={styles.fabIconContainer}>
-            <Ionicons name="camera" size={28} color={COLORS.white} />
-          </View>
-          <Text style={styles.fabText}>REPORT</Text>
-        </TouchableOpacity>
-      </Animated.View>
+      {/* Incident List */}
+      <FlatList
+        data={filteredIncidents}
+        keyExtractor={(item) => item.id}
+        renderItem={renderIncident}
+        contentContainerStyle={styles.listContainer}
+        showsVerticalScrollIndicator={false}
+      />
 
       {/* Incident Modal */}
       <IncidentModal
@@ -137,7 +192,7 @@ export default function DashboardScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.slate50,
   },
   header: {
     flexDirection: 'row',
@@ -204,60 +259,113 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.white,
   },
-  statsBar: {
+  heroContainer: {
+    padding: SPACING.md,
+    backgroundColor: COLORS.white,
+  },
+  heroButton: {
+    backgroundColor: COLORS.fireRed,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    ...SHADOWS.medium,
+    shadowColor: COLORS.fireRed,
+  },
+  heroButtonInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingVertical: SPACING.sm,
+    justifyContent: 'center',
+  },
+  heroIcon: {
+    marginRight: SPACING.md,
+  },
+  heroTitle: {
+    fontSize: FONT_SIZES.xl,
+    fontWeight: '900',
+    color: COLORS.white,
+    letterSpacing: 1,
+  },
+  heroSubtitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 2,
+  },
+  tabRow: {
+    flexDirection: 'row',
     paddingHorizontal: SPACING.md,
-    backgroundColor: COLORS.slate50,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.white,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.slate200,
   },
-  statItem: {
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.slate800,
-  },
-  statLabel: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: COLORS.slate500,
-    marginTop: 2,
-  },
-  statDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: COLORS.slate200,
-  },
-  mapContainer: {
-    flex: 1,
-    margin: SPACING.md,
-  },
-  fabContainer: {
-    position: 'absolute',
-    bottom: SPACING.xl,
-    alignSelf: 'center',
-  },
-  fab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.emerald,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
+  tab: {
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
     borderRadius: BORDER_RADIUS.full,
-    ...SHADOWS.emerald,
-  },
-  fabIconContainer: {
     marginRight: SPACING.sm,
+    backgroundColor: COLORS.slate100,
   },
-  fabText: {
-    fontSize: 16,
-    fontWeight: '800',
+  activeTab: {
+    backgroundColor: COLORS.emerald,
+  },
+  tabText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+    color: COLORS.slate600,
+  },
+  activeTabText: {
     color: COLORS.white,
-    letterSpacing: 2,
+  },
+  listContainer: {
+    padding: SPACING.md,
+    gap: SPACING.sm,
+  },
+  incidentCard: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.white,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    ...SHADOWS.small,
+    alignItems: 'center',
+  },
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: BORDER_RADIUS.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.md,
+  },
+  incidentInfo: {
+    flex: 1,
+  },
+  incidentTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '700',
+    color: COLORS.slate900,
+    marginBottom: 4,
+  },
+  incidentLocation: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.slate500,
+    fontWeight: '500',
+  },
+  incidentMeta: {
+    alignItems: 'flex-end',
+  },
+  incidentTime: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.slate400,
+    fontWeight: '500',
+    marginBottom: 6,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: BORDER_RADIUS.full,
+  },
+  statusText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '700',
   },
 });
