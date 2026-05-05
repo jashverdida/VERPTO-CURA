@@ -18,7 +18,7 @@ CURA is a cutting-edge emergency coordination platform designed for modern first
 Whether coordinating a traffic accident or managing a large-scale disaster, CURA provides real-time incident tracking, AI-powered triage, and intelligent unit dispatch—all from an elegant, intuitive interface.
 
 **👥 Designed for:** Emergency Responders | Station Commanders | Dispatch Centers | Citizens  
-**🛠️ Built by:** VERPTO (Jashmine Verdida & Eijay Pepito)
+**🛠️ Built by:** VERPTO (Jashmine Verdida, Eijay Pepito & Lord Christian Beligaño)
 
 ---
 
@@ -282,6 +282,7 @@ This project was created for the **DevKada Online Hackathon 2026**. We welcome f
 ### Team
 - **Jashmine Verdida** – Full-stack development
 - **Eijay Pepito** – Full-stack development
+- **Lord Christian Beligaño** – Full-stack development
 
 ---
 
