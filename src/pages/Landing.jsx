@@ -46,8 +46,9 @@ export default function Landing() {
   }, []);
 
   const team = [
-    { name: 'Jashmine Verdida', role: 'Founder & Chief QA', photo: JashPhoto, email: 'JashmineVerdida08@gmail.com' },
-    { name: 'Eijay Pepito', role: 'Co-Founder & Creative Director', photo: EijayPhoto, email: 'eijay.pepito8@gmail.com' },
+    { name: 'Eijay Pepito', role: 'Backend Engineer & Systems Architect', photo: EijayPhoto, email: 'eijay.pepito8@gmail.com' },
+    { name: 'Jashmine Verdida', role: 'Chief QA & Frontend Engineer', photo: JashPhoto, email: 'JashmineVerdida08@gmail.com' },
+    { name: 'Lord Christian Beligaño', role: 'AI/ML Engineer', initials: 'LC', email: 'lordchristian88@gmail.com' },
   ];
 
   const services = [
@@ -187,15 +188,15 @@ export default function Landing() {
               Coordinate multi-agency emergency operations with real-time intelligence, unified communication, and pinpoint accuracy.
             </p>
             
-            <div className="flex flex-col sm:flex-row gap-4 pt-4">
-              <a href="#contact" className="group relative px-8 py-4 bg-white text-slate-950 font-bold rounded-xl overflow-hidden hover:shadow-[0_0_40px_rgba(255,255,255,0.3)] transition-all duration-300 text-center">
+            <div className="flex flex-wrap gap-4 pt-4">
+              <a href="#contact" className="group relative flex-1 min-w-[180px] px-8 py-4 bg-white text-slate-950 font-bold rounded-xl overflow-hidden hover:shadow-[0_0_40px_rgba(255,255,255,0.3)] transition-all duration-300 text-center">
                 <span className="relative z-10 flex items-center justify-center gap-2">
                   Authenticate Operator <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </span>
                 <div className="absolute inset-0 h-full w-full bg-gradient-to-r from-emerald-100 to-white opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               </a>
-              
-              <a href="#about" className="px-8 py-4 rounded-xl font-semibold text-white border border-white/10 hover:bg-white/5 backdrop-blur-sm transition-all duration-300 flex items-center justify-center gap-2 group text-center">
+
+              <a href="#about" className="flex-1 min-w-[160px] px-8 py-4 rounded-xl font-semibold text-white border border-white/10 hover:bg-white/5 backdrop-blur-sm transition-all duration-300 flex items-center justify-center gap-2 group text-center">
                 <Globe className="w-5 h-5 text-emerald-400 group-hover:rotate-12 transition-transform" /> Explore Features
               </a>
             </div>
@@ -368,36 +369,40 @@ export default function Landing() {
 
       {/* Team Section */}
       <section id="team" className="py-32 relative">
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 mix-blend-overlay pointer-events-none"></div>
         <div className="max-w-7xl mx-auto px-6 relative z-10">
           <div className="text-center mb-20">
             <h2 className="text-sm font-bold tracking-widest text-emerald-500 uppercase mb-3">Architects</h2>
             <h3 className="text-4xl md:text-5xl font-bold text-white">The Minds Behind CURA</h3>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-12 max-w-4xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-10 max-w-5xl mx-auto">
             {team.map((member, idx) => (
               <div key={idx} className="group relative">
                 {/* Animated Border Gradient */}
                 <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-500 to-blue-500 rounded-3xl opacity-20 group-hover:opacity-100 transition duration-500 blur pointer-events-none"></div>
-                
+
                 <div className="relative bg-slate-900 border border-white/10 rounded-2xl overflow-hidden h-full">
-                  <div className="p-8 flex flex-col items-center text-center">
+                  <div className="p-8 flex flex-col items-center text-center h-full">
                     {/* Avatar */}
-                    <div className="relative mb-6 w-48 h-48 rounded-full overflow-hidden border-4 border-slate-800 group-hover:border-emerald-500/50 transition-colors duration-500">
-                      <img
-                        src={member.photo}
-                        alt={member.name}
-                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 filter grayscale group-hover:grayscale-0"
-                      />
-                      <div className="absolute inset-0 bg-emerald-900/20 mix-blend-multiply opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+                    <div className="relative mb-6 w-36 h-36 rounded-full overflow-hidden border-4 border-slate-800 group-hover:border-emerald-500/50 transition-colors duration-500">
+                      {member.photo ? (
+                        <img
+                          src={member.photo}
+                          alt={member.name}
+                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 filter grayscale group-hover:grayscale-0"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-emerald-800 to-slate-800 flex items-center justify-center">
+                          <span className="text-3xl font-black text-emerald-300">{member.initials}</span>
+                        </div>
+                      )}
                     </div>
 
                     <h3 className="text-2xl font-bold text-white mb-1">{member.name}</h3>
                     <p className="text-emerald-400 font-medium mb-6 uppercase tracking-wider text-xs">{member.role}</p>
 
                     {/* Links */}
-                    <div className="flex gap-4 w-full">
+                    <div className="flex gap-4 w-full mt-auto">
                       <a href={`mailto:${member.email}`} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-slate-800 text-white text-sm font-medium hover:bg-emerald-600 transition-colors duration-300">
                         <Mail className="w-4 h-4" /> Email
                       </a>
@@ -486,7 +491,7 @@ export default function Landing() {
             <div className="flex items-center gap-2">
               <Activity className="w-4 h-4 text-emerald-500" /> Project CURA
             </div>
-            <p>Crafted with precision by Jashmine & Eijay. &copy; 2026</p>
+            <p>by VERPTO &copy; 2026</p>
           </div>
         </div>
       </footer>

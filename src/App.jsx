@@ -8,9 +8,11 @@ import RoadAccidents from './pages/RoadAccidents';
 import RescueOperations from './pages/RescueOperations';
 import SystemStatus from './pages/SystemStatus';
 import StationManagement from './pages/StationManagement';
+import CuraChat from './pages/CuraChat';
 import UserSettings from './pages/UserSettings';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
+import StationDashboard from './pages/StationDashboard';
 import './styles/leaflet-overrides.css';
 
 function App() {
@@ -21,14 +23,16 @@ function App() {
     setSidebarCollapsed(!sidebarCollapsed);
   };
 
-  // Check if current route is a public page (Landing/Login)
+  // Check if current route is a public page (Landing/Login) or station page
   const isPublicPage = location.pathname === '/' || location.pathname === '/login';
+  const isStationPage = location.pathname === '/station';
 
-  if (isPublicPage) {
+  if (isPublicPage || isStationPage) {
     return (
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/station" element={<StationDashboard />} />
       </Routes>
     );
   }
@@ -56,6 +60,7 @@ function App() {
               <Route path="/rescue" element={<RescueOperations />} />
               <Route path="/system" element={<SystemStatus />} />
               <Route path="/stations" element={<StationManagement />} />
+              <Route path="/chat" element={<CuraChat />} />
               <Route path="/settings" element={<UserSettings />} />
             </Routes>
           </div>

@@ -15,6 +15,7 @@ import {
   Cog6ToothIcon,
   ArrowRightOnRectangleIcon,
   BuildingOfficeIcon,
+  ChatBubbleLeftRightIcon,
 } from '@heroicons/react/24/outline';
 
 // ==========================================
@@ -145,6 +146,14 @@ const Sidebar = ({ collapsed, onToggle }) => {
       icon: BuildingOfficeIcon,
       path: '/stations',
       description: 'Manage accounts',
+      category: 'stations'
+    },
+    {
+      id: 'chat',
+      name: 'CURA Chat',
+      icon: ChatBubbleLeftRightIcon,
+      path: '/chat',
+      description: 'Station communications',
       category: 'stations'
     }
   ];
