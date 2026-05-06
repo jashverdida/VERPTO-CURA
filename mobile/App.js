@@ -21,6 +21,10 @@ import ResponderDispatchScreen from './screens/ResponderDispatchScreen';
 import ResponderCommsScreen from './screens/ResponderCommsScreen';
 import ResponderLogsScreen from './screens/ResponderLogsScreen';
 
+// Role Dashboards
+import AdminDashboardScreen from './screens/AdminDashboardScreen';
+import StationDashboardScreen from './screens/StationDashboardScreen';
+
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
@@ -115,6 +119,76 @@ function ResponderTabs() {
   );
 }
 
+function AdminTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarIcon: ({ focused, color, size }) => {
+          const icons = {
+            Overview: focused ? 'shield' : 'shield-outline',
+            Incidents: focused ? 'warning' : 'warning-outline',
+            Units: focused ? 'people' : 'people-outline',
+            Settings: focused ? 'settings' : 'settings-outline',
+          };
+          return <Ionicons name={icons[route.name]} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: COLORS.emerald,
+        tabBarInactiveTintColor: COLORS.slate400,
+        tabBarStyle: {
+          backgroundColor: '#0F172A',
+          borderTopColor: 'rgba(255,255,255,0.08)',
+          borderTopWidth: 1,
+          height: 64,
+          paddingBottom: 10,
+          paddingTop: 8,
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+      })}
+    >
+      <Tab.Screen name="Overview" component={AdminDashboardScreen} />
+      <Tab.Screen name="Incidents" component={AdminDashboardScreen} />
+      <Tab.Screen name="Units" component={AdminDashboardScreen} />
+      <Tab.Screen name="Settings" component={SettingsScreen} />
+    </Tab.Navigator>
+  );
+}
+
+function StationTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarIcon: ({ focused, color, size }) => {
+          const icons = {
+            Dashboard: focused ? 'business' : 'business-outline',
+            Reports: focused ? 'document-text' : 'document-text-outline',
+            Map: focused ? 'map' : 'map-outline',
+            Settings: focused ? 'settings' : 'settings-outline',
+          };
+          return <Ionicons name={icons[route.name]} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: COLORS.emerald,
+        tabBarInactiveTintColor: COLORS.slate400,
+        tabBarStyle: {
+          backgroundColor: '#0F172A',
+          borderTopColor: 'rgba(255,255,255,0.08)',
+          borderTopWidth: 1,
+          height: 64,
+          paddingBottom: 10,
+          paddingTop: 8,
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+      })}
+    >
+      <Tab.Screen name="Dashboard" component={StationDashboardScreen} />
+      <Tab.Screen name="Reports" component={StationDashboardScreen} />
+      <Tab.Screen name="Map" component={MapScreen} />
+      <Tab.Screen name="Settings" component={SettingsScreen} />
+    </Tab.Navigator>
+  );
+}
+
 export default function App() {
   return (
     <NavigationContainer>
@@ -145,6 +219,16 @@ export default function App() {
         <Stack.Screen
           name="ResponderTabs"
           component={ResponderTabs}
+          options={{ animation: 'slide_from_bottom' }}
+        />
+        <Stack.Screen
+          name="AdminTabs"
+          component={AdminTabs}
+          options={{ animation: 'slide_from_bottom' }}
+        />
+        <Stack.Screen
+          name="StationTabs"
+          component={StationTabs}
           options={{ animation: 'slide_from_bottom' }}
         />
         <Stack.Screen

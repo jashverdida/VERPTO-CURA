@@ -7,6 +7,7 @@ import {
   Platform,
   StatusBar,
   FlatList,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SHADOWS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constants/theme';
@@ -41,9 +42,11 @@ export default function DashboardScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <View style={styles.logoContainer}>
-            <Ionicons name="shield-checkmark" size={22} color={COLORS.white} />
-          </View>
+          <Image
+            source={require('../assets/cura-logo.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
           <View>
             <Text style={styles.headerTitle}>CURA</Text>
             <Text style={styles.headerSubtitle}>Incident Status</Text>
@@ -116,13 +119,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  logoContainer: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: COLORS.emerald,
-    alignItems: 'center',
-    justifyContent: 'center',
+  logoImage: {
+    width: 42,
+    height: 42,
     marginRight: SPACING.sm,
   },
   headerTitle: {

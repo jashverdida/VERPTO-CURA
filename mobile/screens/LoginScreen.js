@@ -9,9 +9,10 @@ import {
   StatusBar,
   Platform,
   Alert,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SHADOWS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constants/theme';
+import { COLORS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constants/theme';
 
 export default function LoginScreen({ navigation }) {
   const loginScale = useRef(new Animated.Value(1)).current;
@@ -19,52 +20,66 @@ export default function LoginScreen({ navigation }) {
   const [password, setPassword] = useState('');
 
   const handleLoginPressIn = () => {
-    Animated.spring(loginScale, {
-      toValue: 0.95,
-      useNativeDriver: true,
-    }).start();
+    Animated.spring(loginScale, { toValue: 0.95, useNativeDriver: true }).start();
   };
 
   const handleLoginPressOut = () => {
-    Animated.spring(loginScale, {
-      toValue: 1,
-      friction: 4,
-      useNativeDriver: true,
-    }).start();
+    Animated.spring(loginScale, { toValue: 1, friction: 4, useNativeDriver: true }).start();
   };
 
   const handleLogin = () => {
     const email = identifier.toLowerCase().trim();
-    if (email === 'responders@gmail.com' && password === 'responder123') {
+    if (!email.includes('@') || !email.includes('.com')) {
+      Alert.alert('Login Failed', 'Please enter a valid email address.');
+      return;
+    }
+    if (email === 'admin@email.com') {
+      navigation.replace('AdminTabs');
+    } else if (email === 'station@email.com') {
+      navigation.replace('StationTabs');
+    } else if (email === 'responder@email.com') {
       navigation.replace('ResponderTabs');
-    } else if (email === 'citizen@gmail.com' && password === 'citizen123') {
-      navigation.replace('MainTabs');
     } else {
-      Alert.alert('Login Failed', 'Invalid credentials. Please try again.');
+      navigation.replace('MainTabs');
     }
   };
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
-      
+      <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
+
+      {/* Decorative glow orbs — mirrors web landing blobs */}
+      <View style={styles.orbTopRight} />
+      <View style={styles.orbBottomLeft} />
+      <View style={styles.orbCenter} />
+
+      {/* Header */}
       <View style={styles.header}>
-        <View style={styles.logoContainer}>
-          <Ionicons name="shield-checkmark" size={40} color={COLORS.white} />
-        </View>
+        <Image
+          source={require('../assets/cura-logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
         <Text style={styles.title}>Project CURA</Text>
-        <Text style={styles.subtitle}>Emergency Command Center</Text>
+        <View style={styles.accentLine} />
+        <Text style={styles.subtitle}>Sign in to your account</Text>
       </View>
 
-      <View style={styles.formContainer}>
+      {/* Glass Card */}
+      <View style={styles.card}>
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Phone / Email</Text>
           <View style={styles.inputContainer}>
-            <Ionicons name="person-outline" size={20} color={COLORS.slate400} style={styles.inputIcon} />
+            <Ionicons
+              name="person-outline"
+              size={18}
+              color="rgba(255,255,255,0.4)"
+              style={styles.inputIcon}
+            />
             <TextInput
               style={styles.input}
               placeholder="Enter your phone or email"
-              placeholderTextColor={COLORS.slate400}
+              placeholderTextColor="rgba(255,255,255,0.25)"
               keyboardType="email-address"
               autoCapitalize="none"
               value={identifier}
@@ -76,11 +91,16 @@ export default function LoginScreen({ navigation }) {
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Password</Text>
           <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color={COLORS.slate400} style={styles.inputIcon} />
+            <Ionicons
+              name="lock-closed-outline"
+              size={18}
+              color="rgba(255,255,255,0.4)"
+              style={styles.inputIcon}
+            />
             <TextInput
               style={styles.input}
               placeholder="Enter your password"
-              placeholderTextColor={COLORS.slate400}
+              placeholderTextColor="rgba(255,255,255,0.25)"
               secureTextEntry
               value={password}
               onChangeText={setPassword}
@@ -88,7 +108,7 @@ export default function LoginScreen({ navigation }) {
           </View>
         </View>
 
-        <Animated.View style={{ transform: [{ scale: loginScale }], marginTop: SPACING.lg }}>
+        <Animated.View style={[{ transform: [{ scale: loginScale }] }, styles.buttonWrapper]}>
           <TouchableOpacity
             style={styles.loginButton}
             onPressIn={handleLoginPressIn}
@@ -101,10 +121,6 @@ export default function LoginScreen({ navigation }) {
           </TouchableOpacity>
         </Animated.View>
       </View>
-      
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Secure Operator Access Only</Text>
-      </View>
     </View>
   );
 }
@@ -112,59 +128,99 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: '#0F172A',
     paddingHorizontal: SPACING.xl,
-  },
-  header: {
-    marginTop: Platform.OS === 'ios' ? 100 : 80,
-    alignItems: 'center',
-    marginBottom: SPACING.xxl,
-  },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: BORDER_RADIUS.xl,
-    backgroundColor: COLORS.emerald,
-    alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  // Glow orbs
+  orbTopRight: {
+    position: 'absolute',
+    top: -80,
+    right: -80,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: 'rgba(16,185,129,0.15)',
+  },
+  orbBottomLeft: {
+    position: 'absolute',
+    bottom: -100,
+    left: -100,
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    backgroundColor: 'rgba(16,185,129,0.10)',
+  },
+  orbCenter: {
+    position: 'absolute',
+    top: '35%',
+    right: -60,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(52,211,153,0.07)',
+  },
+
+  // Header
+  header: {
+    alignItems: 'center',
+    marginBottom: SPACING.xl,
+  },
+  logo: {
+    width: 90,
+    height: 90,
     marginBottom: SPACING.md,
-    ...SHADOWS.emerald,
   },
   title: {
     fontSize: FONT_SIZES.xxxl,
     fontWeight: '800',
-    color: COLORS.slate900,
-    letterSpacing: 1,
+    color: COLORS.white,
+    letterSpacing: 0.5,
+    marginBottom: SPACING.sm,
+  },
+  accentLine: {
+    width: 40,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: COLORS.emerald,
+    marginBottom: SPACING.sm,
   },
   subtitle: {
     fontSize: FONT_SIZES.md,
-    fontWeight: '500',
-    color: COLORS.slate500,
-    marginTop: SPACING.xs,
+    fontWeight: '400',
+    color: 'rgba(255,255,255,0.45)',
+    letterSpacing: 0.3,
   },
-  formContainer: {
-    width: '100%',
+
+  // Glass card
+  card: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    borderRadius: BORDER_RADIUS.xxl,
+    padding: SPACING.xl,
   },
   inputGroup: {
     marginBottom: SPACING.lg,
   },
   label: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.xs,
     fontWeight: '700',
-    color: COLORS.slate700,
+    color: 'rgba(255,255,255,0.55)',
     marginBottom: SPACING.sm,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.slate50,
+    backgroundColor: 'rgba(255,255,255,0.07)',
     borderWidth: 1,
-    borderColor: COLORS.slate200,
-    borderRadius: BORDER_RADIUS.md,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: BORDER_RADIUS.lg,
     paddingHorizontal: SPACING.md,
-    height: 56,
+    height: 54,
   },
   inputIcon: {
     marginRight: SPACING.sm,
@@ -172,35 +228,31 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: FONT_SIZES.md,
-    color: COLORS.slate900,
+    color: COLORS.white,
     height: '100%',
   },
+
+  // Button
+  buttonWrapper: {
+    marginTop: SPACING.sm,
+  },
   loginButton: {
-    backgroundColor: COLORS.slate900,
+    backgroundColor: COLORS.emerald,
     flexDirection: 'row',
-    height: 60,
-    borderRadius: BORDER_RADIUS.md,
+    height: 56,
+    borderRadius: BORDER_RADIUS.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    ...SHADOWS.medium,
+    shadowColor: COLORS.emerald,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+    elevation: 12,
   },
   loginButtonText: {
     fontSize: FONT_SIZES.lg,
     fontWeight: '700',
     color: COLORS.white,
     marginRight: SPACING.sm,
-  },
-  footer: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    marginBottom: SPACING.xl,
-  },
-  footerText: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: '500',
-    color: COLORS.slate400,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
 });

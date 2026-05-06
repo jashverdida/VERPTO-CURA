@@ -7,6 +7,7 @@ import {
   Animated,
   Platform,
   StatusBar,
+  Image,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
@@ -191,9 +192,11 @@ export default function MapScreen({ navigation }) {
       <View style={styles.topBar} pointerEvents="box-none">
         <View style={styles.topBarInner}>
           <View style={styles.topBarLeft}>
-            <View style={styles.topLogoBox}>
-              <Ionicons name="shield-checkmark" size={18} color={COLORS.white} />
-            </View>
+            <Image
+              source={require('../assets/cura-logo.png')}
+              style={styles.topLogoImage}
+              resizeMode="contain"
+            />
             <View>
               <Text style={styles.topTitle}>Map View</Text>
               <Text style={styles.topSub}>Barangay 123 · Live</Text>
@@ -277,13 +280,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  topLogoBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: COLORS.emerald,
-    alignItems: 'center',
-    justifyContent: 'center',
+  topLogoImage: {
+    width: 38,
+    height: 38,
     marginRight: SPACING.sm,
   },
   topTitle: {

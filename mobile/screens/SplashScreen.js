@@ -4,13 +4,10 @@ import {
   Text,
   StyleSheet,
   Animated,
-  Dimensions,
   StatusBar,
+  Image,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/theme';
-
-const { width, height } = Dimensions.get('window');
 
 export default function SplashScreen({ navigation }) {
   const logoOpacity = useRef(new Animated.Value(0)).current;
@@ -77,25 +74,12 @@ export default function SplashScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
+      <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
 
-      {/* Background Pattern */}
-      <View style={styles.backgroundPattern}>
-        {[...Array(6)].map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.patternCircle,
-              {
-                width: 100 + i * 80,
-                height: 100 + i * 80,
-                borderRadius: (100 + i * 80) / 2,
-                opacity: 0.03 - i * 0.004,
-              },
-            ]}
-          />
-        ))}
-      </View>
+      {/* Decorative glow orbs */}
+      <View style={styles.orbTopRight} />
+      <View style={styles.orbBottomLeft} />
+      <View style={styles.orbCenter} />
 
       {/* Logo Section */}
       <Animated.View
@@ -113,9 +97,11 @@ export default function SplashScreen({ navigation }) {
             { transform: [{ scale: pulseAnim }] },
           ]}
         >
-          <View style={styles.iconCircle}>
-            <Ionicons name="shield-checkmark" size={48} color={COLORS.white} />
-          </View>
+          <Image
+            source={require('../assets/cura-logo.png')}
+            style={styles.iconImage}
+            resizeMode="contain"
+          />
         </Animated.View>
 
         <Text style={styles.logoText}>CURA</Text>
@@ -148,7 +134,14 @@ export default function SplashScreen({ navigation }) {
           { opacity: subtitleOpacity },
         ]}
       >
-        <Text style={styles.footerText}>by VERPTO</Text>
+        <View style={styles.footerBrand}>
+          <Text style={styles.footerBy}>by</Text>
+          <Image
+            source={require('../assets/VERPTO-logo.png')}
+            style={styles.verptoLogo}
+            resizeMode="contain"
+          />
+        </View>
         <View style={styles.loadingDots}>
           {[0, 1, 2].map((i) => (
             <Animated.View
@@ -170,21 +163,36 @@ export default function SplashScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: '#0F172A',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backgroundPattern: {
+  orbTopRight: {
     position: 'absolute',
-    width: width,
-    height: height,
-    alignItems: 'center',
-    justifyContent: 'center',
+    top: -80,
+    right: -80,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: 'rgba(16,185,129,0.15)',
   },
-  patternCircle: {
+  orbBottomLeft: {
     position: 'absolute',
-    borderWidth: 1,
-    borderColor: COLORS.emerald,
+    bottom: -100,
+    left: -100,
+    width: 340,
+    height: 340,
+    borderRadius: 170,
+    backgroundColor: 'rgba(16,185,129,0.10)',
+  },
+  orbCenter: {
+    position: 'absolute',
+    top: '55%',
+    right: -60,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(52,211,153,0.07)',
   },
   logoContainer: {
     alignItems: 'center',
@@ -193,29 +201,20 @@ const styles = StyleSheet.create({
   iconWrapper: {
     marginBottom: 20,
   },
-  iconCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: COLORS.emerald,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: COLORS.emerald,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 12,
+  iconImage: {
+    width: 120,
+    height: 120,
   },
   logoText: {
     fontSize: 56,
     fontWeight: '800',
-    color: COLORS.slate900,
+    color: COLORS.white,
     letterSpacing: 12,
   },
   logoSubtext: {
     fontSize: 14,
     fontWeight: '600',
-    color: COLORS.deepForest,
+    color: COLORS.emerald,
     letterSpacing: 8,
     marginTop: -5,
   },
@@ -226,7 +225,7 @@ const styles = StyleSheet.create({
   tagline: {
     fontSize: 16,
     fontWeight: '500',
-    color: COLORS.slate600,
+    color: 'rgba(255,255,255,0.65)',
     textAlign: 'center',
     marginBottom: 12,
   },
@@ -240,7 +239,7 @@ const styles = StyleSheet.create({
   description: {
     fontSize: 13,
     fontWeight: '400',
-    color: COLORS.slate500,
+    color: 'rgba(255,255,255,0.40)',
     textAlign: 'center',
   },
   footer: {
@@ -248,12 +247,22 @@ const styles = StyleSheet.create({
     bottom: 60,
     alignItems: 'center',
   },
-  footerText: {
+  footerBrand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 6,
+  },
+  footerBy: {
     fontSize: 12,
     fontWeight: '500',
-    color: COLORS.slate400,
+    color: 'rgba(255,255,255,0.30)',
     letterSpacing: 2,
-    marginBottom: 16,
+  },
+  verptoLogo: {
+    height: 18,
+    width: 80,
+    opacity: 0.5,
   },
   loadingDots: {
     flexDirection: 'row',
