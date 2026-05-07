@@ -111,6 +111,21 @@ npm run dev
 
 Your application will be available at **http://localhost:5173** ✨
 
+---
+
+### 🔐 Web Login Credentials
+
+**Demo accounts for testing:**
+
+| Role | Email | Password |
+|------|-------|----------|
+| Command Center Admin | `admin@gmail.com` | `admin123` |
+| Station Operator | `station@gmail.com` | `station123` |
+
+Use these credentials to access different dashboard views and test various user roles.
+
+---
+
 ### Build for Production
 
 ```bash
@@ -238,6 +253,26 @@ CURA/
 - 🟠 **HIGH** – Serious injuries or significant threat
 - 🟡 **MEDIUM** – Moderate injuries or stable situation
 - 🟢 **LOW** – Minor injuries or non-urgent calls
+
+---
+
+## 📈 Project Status
+
+**Latest Update:** May 2026 - Post Hackathon Release  
+✅ **Core Features:** All primary features completed and tested  
+✅ **Web Dashboard:** Full command center with real-time incident tracking  
+✅ **Mobile App:** Complete React Native app with field responder capabilities  
+✅ **AI Integration:** Voice transcription and image analysis functional  
+✅ **Cross-Platform:** Web, iOS, and Android support ready  
+
+**Currently Implemented:**
+- Multi-hazard incident management
+- Real-time mapping and unit tracking
+- AI-powered triage system
+- Patient care records (PCR) management
+- Inter-agency communication hub
+- Station management dashboards
+- Corporate and station-level analytics
 
 ---
 

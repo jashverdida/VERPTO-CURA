@@ -1,6 +1,8 @@
-# Project CURA Mobile
+# 📱 Project CURA Mobile
 
-The mobile companion app for Project CURA - Community-Unified Response Application.
+The mobile companion app for Project CURA - Community-Unified Response Application.  
+**Status:** ✅ Complete Hackathon Edition (May 2026)  
+**Platform:** React Native with Expo for iOS & Android
 
 ## Features
 
@@ -65,6 +67,19 @@ mobile/
 | Emerald | `#10B981` | Primary actions, buttons |
 | Slate 200 | `#E2E8F0` | Borders, dividers |
 
+## 🔐 Mobile Login Credentials
+
+**Demo accounts for testing different user roles:**
+
+| Role | Email | Password |
+|------|-------|----------|
+| Citizen Reporter | `citizen@gmail.com` | `citizen123` |
+| Field Responder | `responder@gmail.com` | `responder123` |
+
+Use these credentials to test incident reporting as a citizen or respond to emergencies as a field responder.
+
+---
+
 ## API Keys (Required for Maps)
 
 For full map functionality, you'll need to add Google Maps API keys:
@@ -98,6 +113,28 @@ For full map functionality, you'll need to add Google Maps API keys:
 
 ### 3. Camera Screen
 - Camera permission handling
+- Real-time incident documentation
+- AI verification of scene imagery
+
+---
+
+## 📱 Latest Updates
+
+**Current Version:** 1.0.0 (Hackathon Release)  
+✅ Full mobile dashboard with map integration  
+✅ Emergency incident reporting system  
+✅ Real-time status tracking  
+✅ Voice & image-based incident verification  
+✅ Field responder communication  
+✅ Offline capability for core features  
+
+**Mobile-Specific Features:**
+- GPS-based location auto-fill
+- Camera integration for scene documentation
+- Push notifications for incident alerts
+- Voice command support for incident reporting
+- Optimized touch interfaces for field use
+- Battery-efficient background syncing
 - Viewfinder overlay
 - Capture button with animations
 - Photo preview (simulated)
