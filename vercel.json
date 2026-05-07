@@ -3,14 +3,5 @@
   "devCommand": "npm run dev",
   "installCommand": "npm ci",
   "framework": "vite",
-  "outputDirectory": "dist",
-  "env": [
-    "VITE_GOOGLE_MAPS_API_KEY"
-  ],
-  "redirects": [
-    {
-      "source": "/:path*",
-      "destination": "/:path*"
-    }
-  ]
+  "outputDirectory": "dist"
 }
