@@ -23,7 +23,8 @@
       },
       "infoPlist": {
         "NSCameraUsageDescription": "CURA needs camera access to capture emergency incident photos for AI verification.",
-        "NSLocationWhenInUseUsageDescription": "CURA needs location access to pinpoint emergency locations accurately."
+        "NSLocationWhenInUseUsageDescription": "CURA needs location access to pinpoint emergency locations accurately.",
+        "NSPhotoLibraryUsageDescription": "CURA needs photo library access to select emergency incident photos."
       }
     },
     "android": {
@@ -35,7 +36,9 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION"
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE"
       ],
       "config": {
         "googleMaps": {
@@ -51,6 +54,12 @@
         "expo-camera",
         {
           "cameraPermission": "Allow CURA to access your camera to capture emergency photos."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow CURA to access your photo library to select emergency incident photos."
         }
       ],
       "expo-asset",
