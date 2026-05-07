@@ -16,6 +16,7 @@ import {
   ArrowRightOnRectangleIcon,
   BuildingOfficeIcon,
   ChatBubbleLeftRightIcon,
+  ArchiveBoxIcon,
 } from '@heroicons/react/24/outline';
 
 // ==========================================
@@ -30,6 +31,7 @@ const CATEGORY_COLOR_MAP = {
   dashboard:  { bg: 'bg-emerald-600',  shadow: 'shadow-emerald-900/30',  badgeBg: 'bg-white',      badgeText: 'text-emerald-600',  gradientBg: 'bg-gradient-to-b from-emerald-950 via-emerald-900 to-slate-950' },
   system:     { bg: 'bg-emerald-600',  shadow: 'shadow-emerald-900/30',  badgeBg: 'bg-white',      badgeText: 'text-emerald-600',  gradientBg: 'bg-gradient-to-b from-emerald-950 via-emerald-900 to-slate-950' },
   stations:   { bg: 'bg-emerald-600',  shadow: 'shadow-emerald-900/30',  badgeBg: 'bg-white',      badgeText: 'text-emerald-600',  gradientBg: 'bg-gradient-to-b from-emerald-950 via-emerald-900 to-slate-950' },
+  archives:   { bg: 'bg-cyan-600',     shadow: 'shadow-cyan-900/30',     badgeBg: 'bg-white',      badgeText: 'text-cyan-600',     gradientBg: 'bg-gradient-to-b from-cyan-950 via-cyan-900 to-slate-950' },
   default:    { bg: 'bg-emerald-600',  shadow: 'shadow-emerald-900/30',  badgeBg: 'bg-white',      badgeText: 'text-emerald-600',  gradientBg: 'bg-gradient-to-b from-slate-900 to-slate-950' }
 };
 
@@ -155,6 +157,14 @@ const Sidebar = ({ collapsed, onToggle }) => {
       path: '/chat',
       description: 'Station communications',
       category: 'stations'
+    },
+    {
+      id: 'archives',
+      name: 'Report Archives',
+      icon: ArchiveBoxIcon,
+      path: '/archives',
+      description: 'Historical incidents',
+      category: 'archives'
     }
   ];
 

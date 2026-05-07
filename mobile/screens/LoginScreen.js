@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constants/theme';
-import { supabase } from '../lib/supabase';
 
 export default function LoginScreen({ navigation }) {
   const loginScale = useRef(new Animated.Value(1)).current;
@@ -28,13 +27,6 @@ export default function LoginScreen({ navigation }) {
     Animated.spring(loginScale, { toValue: 1, friction: 4, useNativeDriver: true }).start();
   };
 
-  const navigateByRole = (role) => {
-    if (role === 'admin')     navigation.replace('AdminTabs');
-    else if (role === 'station')    navigation.replace('StationTabs');
-    else if (role === 'responder')  navigation.replace('ResponderTabs');
-    else                            navigation.replace('MainTabs');
-  };
-
   const handleLogin = async () => {
     const email = identifier.toLowerCase().trim();
     if (!email.includes('@')) {
@@ -42,20 +34,18 @@ export default function LoginScreen({ navigation }) {
       return;
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (!error && data?.user) {
-      const role = data.user.user_metadata?.role ?? 'citizen';
-      navigateByRole(role);
-      return;
-    }
-
-    // Fallback: legacy hardcoded navigation (dev convenience)
+    // Hardcoded demo credentials
     if (email === 'admin@email.com')     { navigation.replace('AdminTabs'); return; }
     if (email === 'station@email.com')   { navigation.replace('StationTabs'); return; }
     if (email === 'responder@email.com') { navigation.replace('ResponderTabs'); return; }
+    
+    // Citizens: accept any email with "@email.com" and any password
+    if (email.includes('@email.com')) {
+      navigation.replace('MainTabs');
+      return;
+    }
 
-    Alert.alert('Login Failed', error?.message ?? 'Invalid credentials.');
+    Alert.alert('Login Failed', 'Use any email with @email.com (e.g., john@email.com)');
   };
 
   return (
