@@ -15,6 +15,9 @@ import AlertsScreen from './screens/AlertsScreen';
 import MapScreen from './screens/MapScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import CameraScreen from './screens/CameraScreen';
+import ReportScreen from './screens/ReportScreen';
+import EmergencyTypeScreen from './screens/EmergencyTypeScreen';
+import TriageChatScreen from './screens/TriageChatScreen';
 
 // Responder Screens
 import ResponderDispatchScreen from './screens/ResponderDispatchScreen';
@@ -237,6 +240,29 @@ export default function App() {
           options={{
             animation: 'slide_from_bottom',
             presentation: 'fullScreenModal',
+          }}
+        />
+        <Stack.Screen
+          name="ReportEmergency"
+          component={ReportScreen}
+          options={{
+            animation: 'slide_from_bottom',
+            presentation: 'modal',
+          }}
+        />
+        <Stack.Screen
+          name="EmergencyType"
+          component={EmergencyTypeScreen}
+          options={{
+            animation: 'fade',
+            presentation: 'transparentModal',
+          }}
+        />
+        <Stack.Screen
+          name="TriageChat"
+          component={TriageChatScreen}
+          options={{
+            animation: 'slide_from_right',
           }}
         />
       </Stack.Navigator>

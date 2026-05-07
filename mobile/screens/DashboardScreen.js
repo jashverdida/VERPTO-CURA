@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,15 +10,58 @@ import {
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, SHADOWS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constants/theme';
 import IncidentModal from '../components/IncidentModal';
 import IncidentCard from '../components/IncidentCard';
 import { MOCK_INCIDENTS, TABS } from '../constants/mockData';
+import { getFireReports, subscribeFireReports } from '../constants/SharedState';
+
+// ── Convert a fire report → incident shape consumed by IncidentCard + IncidentModal ──
+function fireToIncident(report) {
+  const statusLabel =
+    report.status === 'ongoing' ? 'Active' :
+    report.status === 'under_control' ? 'In Progress' : 'Resolved';
+
+  return {
+    // IncidentCard fields
+    id: report.id,
+    type: 'Fire',
+    title: 'Fire Emergency',
+    location: report.address,
+    distance: '—',
+    time: report.reportedAt,
+    status: statusLabel,
+    category: 'Own Emergency',
+    priority: 'Critical',
+    // IncidentModal fields
+    address: report.address,
+    reportedAt: report.reportedAt,
+    description: report.description || 'Fire emergency reported by citizen.',
+    severity: 'Critical',
+    imageUrl: report.photoUri || null,
+    aiAnalysis: report.aiAnalysis || null,
+  };
+}
 
 export default function DashboardScreen({ navigation }) {
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [activeTab, setActiveTab] = useState('All');
+  const [fireIncidents, setFireIncidents] = useState(() =>
+    getFireReports().map(fireToIncident)
+  );
+
+  // Keep fire incidents in sync whenever the screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      setFireIncidents(getFireReports().map(fireToIncident));
+      const unsub = subscribeFireReports((reports) => {
+        setFireIncidents(reports.map(fireToIncident));
+      });
+      return unsub;
+    }, [])
+  );
 
   const handleIncidentPress = (incident) => {
     setSelectedIncident(incident);
@@ -30,10 +73,13 @@ export default function DashboardScreen({ navigation }) {
     setSelectedIncident(null);
   };
 
+  // Merge mock incidents with live fire reports
+  const allIncidents = useMemo(() => [...fireIncidents, ...MOCK_INCIDENTS], [fireIncidents]);
+
   const filteredIncidents = useMemo(() => {
-    if (activeTab === 'All') return MOCK_INCIDENTS;
-    return MOCK_INCIDENTS.filter(inc => inc.category === activeTab);
-  }, [activeTab]);
+    if (activeTab === 'All') return allIncidents;
+    return allIncidents.filter(inc => inc.category === activeTab);
+  }, [activeTab, allIncidents]);
 
   return (
     <View style={styles.container}>
@@ -54,7 +100,7 @@ export default function DashboardScreen({ navigation }) {
         </View>
       </View>
 
-      {/* Prominent Tabs */}
+      {/* Tabs */}
       <View style={styles.tabRow}>
         {TABS.map((tab) => {
           const isActive = activeTab === tab;

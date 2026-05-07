@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { AlertCircle, MapPin, Lock, Users, Radio, Shield, Mail, Linkedin, ChevronRight, Activity, Globe, Zap, ArrowRight, Menu, X } from 'lucide-react';
 import JashPhoto from '../devs/Jash.png';
 import EijayPhoto from '../devs/eijay (1).png';
+import YadoPhoto from '../devs/yado_nobg.png';
 
 export default function Landing() {
   const [scrolled, setScrolled] = useState(false);
@@ -46,9 +47,9 @@ export default function Landing() {
   }, []);
 
   const team = [
-    { name: 'Eijay Pepito', role: 'Backend Engineer & Systems Architect', photo: EijayPhoto, email: 'eijay.pepito8@gmail.com' },
-    { name: 'Jashmine Verdida', role: 'Chief QA & Frontend Engineer', photo: JashPhoto, email: 'JashmineVerdida08@gmail.com' },
-    { name: 'Lord Christian Beligaño', role: 'AI/ML Engineer', initials: 'LC', email: 'lordchristian88@gmail.com' },
+    { name: 'Eijay Pepito', role: 'Backend Engineer & Systems Architect', photo: EijayPhoto, email: 'eijay.pepito8@gmail.com', linkedin: 'https://www.linkedin.com/in/eijay-pepito-98b538355/' },
+    { name: 'Jashmine Verdida', role: 'Chief QA & Frontend Engineer', photo: JashPhoto, email: 'jashmineverdida08@gmail.com', linkedin: 'https://www.linkedin.com/in/jashmine-verdida-820a56352/' },
+    { name: 'Lord Christian Beligaño', role: 'AI/ML Engineer', photo: YadoPhoto, email: 'lordchristian88@gmail.com', linkedin: 'https://www.linkedin.com/in/beliga%C3%B1o-lord-christian-64484524a/' },
   ];
 
   const services = [
@@ -406,7 +407,7 @@ export default function Landing() {
                       <a href={`mailto:${member.email}`} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-slate-800 text-white text-sm font-medium hover:bg-emerald-600 transition-colors duration-300">
                         <Mail className="w-4 h-4" /> Email
                       </a>
-                      <a href="#" className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-slate-800 text-white text-sm font-medium hover:bg-blue-600 transition-colors duration-300">
+                      <a href={member.linkedin} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-slate-800 text-white text-sm font-medium hover:bg-blue-600 transition-colors duration-300">
                         <Linkedin className="w-4 h-4" /> LinkedIn
                       </a>
                     </div>
