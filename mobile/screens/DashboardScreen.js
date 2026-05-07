@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,32 +15,47 @@ import { COLORS, SHADOWS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constant
 import IncidentModal from '../components/IncidentModal';
 import IncidentCard from '../components/IncidentCard';
 import { MOCK_INCIDENTS, TABS } from '../constants/mockData';
-import { getFireReports, subscribeFireReports } from '../constants/SharedState';
+import { supabase } from '../lib/supabase';
 
-// ── Convert a fire report → incident shape consumed by IncidentCard + IncidentModal ──
-function fireToIncident(report) {
+function formatRelativeTime(isoString) {
+  if (!isoString) return 'Just now';
+  const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+  if (diff < 60) return 'Just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+  return `${Math.floor(diff / 86400)} d ago`;
+}
+
+// ── Convert a Supabase incidents row → incident shape for IncidentCard + IncidentModal ──
+function fireToIncident(row) {
+  const TYPE_LABELS = { FIRE: 'Fire', VEHICLE: 'Vehicle', HAZMAT: 'HAZMAT', MEDICAL: 'Medical', SEARCH_RESCUE: 'Search & Rescue' };
   const statusLabel =
-    report.status === 'ongoing' ? 'Active' :
-    report.status === 'under_control' ? 'In Progress' : 'Resolved';
+    row.status === 'active' ? 'Active' :
+    row.status === 'resolved' ? 'Resolved' : 'In Progress';
+  const typeLabel = TYPE_LABELS[row.type] ?? row.type ?? 'Emergency';
+
+  let imageUrl = null;
+  if (row.image_path) {
+    const { data } = supabase.storage.from('camera-reports').getPublicUrl(row.image_path);
+    imageUrl = data?.publicUrl ?? null;
+  }
 
   return {
-    // IncidentCard fields
-    id: report.id,
-    type: 'Fire',
-    title: 'Fire Emergency',
-    location: report.address,
+    id: row.id,
+    type: typeLabel,
+    title: `${typeLabel} Emergency`,
+    location: row.address || 'Unknown location',
     distance: '—',
-    time: report.reportedAt,
+    time: formatRelativeTime(row.created_at),
     status: statusLabel,
     category: 'Own Emergency',
-    priority: 'Critical',
-    // IncidentModal fields
-    address: report.address,
-    reportedAt: report.reportedAt,
-    description: report.description || 'Fire emergency reported by citizen.',
-    severity: 'Critical',
-    imageUrl: report.photoUri || null,
-    aiAnalysis: report.aiAnalysis || null,
+    priority: row.severity === 'high' ? 'Critical' : 'Medium',
+    address: row.address || 'Unknown location',
+    reportedAt: formatRelativeTime(row.created_at),
+    description: row.description || 'Emergency reported by citizen.',
+    severity: row.severity ?? 'medium',
+    imageUrl,
+    aiAnalysis: null,
   };
 }
 
@@ -48,18 +63,23 @@ export default function DashboardScreen({ navigation }) {
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [activeTab, setActiveTab] = useState('All');
-  const [fireIncidents, setFireIncidents] = useState(() =>
-    getFireReports().map(fireToIncident)
-  );
+  const [fireIncidents, setFireIncidents] = useState([]);
 
-  // Keep fire incidents in sync whenever the screen is focused
   useFocusEffect(
     useCallback(() => {
-      setFireIncidents(getFireReports().map(fireToIncident));
-      const unsub = subscribeFireReports((reports) => {
-        setFireIncidents(reports.map(fireToIncident));
-      });
-      return unsub;
+      supabase
+        .from('incidents')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .then(({ data }) => setFireIncidents((data ?? []).map(fireToIncident)));
+
+      const channel = supabase
+        .channel('dashboard-incidents')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'incidents' },
+          payload => setFireIncidents(prev => [fireToIncident(payload.new), ...prev]))
+        .subscribe();
+
+      return () => supabase.removeChannel(channel);
     }, [])
   );
 

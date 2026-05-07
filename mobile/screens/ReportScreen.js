@@ -18,7 +18,7 @@ import {
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SHADOWS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constants/theme';
-import { addFireReport } from '../constants/SharedState';
+import { supabase } from '../lib/supabase';
 
 const { width, height } = Dimensions.get('window');
 
@@ -199,7 +199,7 @@ export default function ReportScreen({ navigation, route }) {
   };
 
   // ── Submit report ──
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (confirming || confirmed) return;
     setConfirming(true);
 
@@ -208,14 +208,28 @@ export default function ReportScreen({ navigation, route }) {
       Animated.timing(confirmScale, { toValue: 1, duration: 90, useNativeDriver: true }),
     ]).start();
 
-    addFireReport({
-      lat: selectedLat,
-      lng: selectedLng,
+    let imagePath = null;
+    if (photoUri) {
+      try {
+        const blob = await (await fetch(photoUri)).blob();
+        const fileName = `report_${Date.now()}.jpg`;
+        const { data: storageData, error: storageError } = await supabase.storage
+          .from('camera-reports')
+          .upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
+        if (!storageError) imagePath = storageData.path;
+      } catch (_) {}
+    }
+
+    await supabase.from('incidents').insert({
+      type:        emergencyType.toUpperCase(),
+      lat:         selectedLat,
+      lng:         selectedLng,
       address,
-      description: description.trim() || 'Fire emergency reported by citizen.',
-      photoUri,
-      aiAnalysis:
-        'Thermal anomaly confirmed at reported location. Citizen-submitted fire incident. Hazard classification: active combustion. AI confidence: 94%. Emergency response has been dispatched.',
+      description: description.trim() || 'Emergency reported by citizen.',
+      image_path:  imagePath,
+      ai_verified: false,
+      status:      'active',
+      severity:    'medium',
     });
 
     setTimeout(() => {

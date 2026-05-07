@@ -13,7 +13,7 @@ import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, SHADOWS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constants/theme';
-import { getFireReports, subscribeFireReports } from '../constants/SharedState';
+import { supabase } from '../lib/supabase';
 import FireMarkerModal from '../components/FireMarkerModal';
 
 // ── Leaflet HTML ─────────────────────────────────────────────────────────────
@@ -194,21 +194,52 @@ export default function MapScreen({ navigation }) {
   const webViewRef = useRef(null);
   const mapReadyRef = useRef(false);
 
-  // Inject all fire reports into the map WebView
-  const syncFireMarkers = useCallback(() => {
+  // Inject all incidents into the map WebView
+  const syncFireMarkers = useCallback(async () => {
     if (!mapReadyRef.current || !webViewRef.current) return;
-    const reports = getFireReports();
-    reports.forEach(r => {
-      webViewRef.current.injectJavaScript(`addFireMarker(${JSON.stringify(r)}); true;`);
+    const { data } = await supabase
+      .from('incidents')
+      .select('id,lat,lng,address,description,type,status,created_at,image_path');
+    (data ?? []).forEach(r => {
+      const marker = {
+        id:          r.id,
+        lat:         r.lat,
+        lng:         r.lng,
+        address:     r.address ?? '',
+        description: r.description ?? '',
+        status:      r.status ?? 'active',
+        reportedAt:  r.created_at,
+        photoUri:    '',
+      };
+      webViewRef.current.injectJavaScript(`addFireMarker(${JSON.stringify(marker)}); true;`);
     });
   }, []);
 
-  // Re-sync markers whenever this screen gains focus (new report added from ReportScreen)
   useFocusEffect(
     useCallback(() => {
       syncFireMarkers();
-      const unsub = subscribeFireReports(() => syncFireMarkers());
-      return unsub;
+
+      const channel = supabase
+        .channel('map-incidents')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'incidents' },
+          payload => {
+            if (!mapReadyRef.current || !webViewRef.current) return;
+            const r = payload.new;
+            const marker = {
+              id:          r.id,
+              lat:         r.lat,
+              lng:         r.lng,
+              address:     r.address ?? '',
+              description: r.description ?? '',
+              status:      r.status ?? 'active',
+              reportedAt:  r.created_at,
+              photoUri:    '',
+            };
+            webViewRef.current.injectJavaScript(`addFireMarker(${JSON.stringify(marker)}); true;`);
+          })
+        .subscribe();
+
+      return () => supabase.removeChannel(channel);
     }, [syncFireMarkers])
   );
 

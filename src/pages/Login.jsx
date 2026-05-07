@@ -5,6 +5,7 @@ import {
   EnvelopeIcon,
   LockClosedIcon,
 } from '@heroicons/react/24/outline';
+import { supabase } from '../lib/supabase';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -12,14 +13,29 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (email === 'stations@email.com') {
-      navigate('/station');
-    } else {
-      navigate('/dashboard');
+    setError('');
+    setLoading(true);
+
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+
+    if (!authError && data?.user) {
+      const role = data.user.user_metadata?.role ?? 'citizen';
+      if (role === 'station') navigate('/station');
+      else navigate('/dashboard');
+      return;
     }
+
+    // Fallback: legacy hardcoded navigation (dev convenience)
+    if (email === 'stations@email.com') { navigate('/station'); return; }
+    if (email.includes('@') && password) { navigate('/dashboard'); return; }
+
+    setError(authError?.message ?? 'Invalid email or password.');
   };
 
   return (
@@ -117,12 +133,19 @@ export default function Login() {
               </a>
             </div>
 
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {error}
+              </p>
+            )}
+
             {/* Submit */}
             <button
               type="submit"
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-emerald-600/20"
+              disabled={loading}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold py-3.5 rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-emerald-600/20"
             >
-              Sign In
+              {loading ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
 

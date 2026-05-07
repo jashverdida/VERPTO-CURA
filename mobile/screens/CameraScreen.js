@@ -17,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import ViewShot from 'react-native-view-shot';
 import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '../lib/supabase';
 import { COLORS, SHADOWS, BORDER_RADIUS, SPACING } from '../constants/theme';
 
 const { width, height } = Dimensions.get('window');
@@ -371,14 +372,47 @@ export default function CameraScreen({ navigation, route }) {
     setScreenState(STATE_CAMERA);
   };
 
-  const handleConfirm = () => {
-    setScreenState(STATE_SUCCESS);
+  const handleConfirm = async () => {
+    const top = detections.length
+      ? detections.reduce((a, b) => a.confidence > b.confidence ? a : b)
+      : null;
 
+    // 1. Upload image to Supabase Storage
+    let imagePath = null;
+    try {
+      const blob     = await (await fetch(capturedImageUri)).blob();
+      const fileName = `${Date.now()}.jpg`;
+      const { data: storageData, error: storageError } = await supabase.storage
+        .from('camera-reports')
+        .upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
+      if (!storageError) imagePath = storageData.path;
+    } catch (_) {}
+
+    // 2. Insert incident
+    const { data: incident } = await supabase.from('incidents').insert({
+      type:           emergencyType.toUpperCase(),
+      ai_verified:    detections.length > 0,
+      ai_confidence:  top ? Math.round(top.confidence * 100) : null,
+      ai_hazard_type: top ? top.class?.toUpperCase() : null,
+    }).select().single();
+
+    // 3. Insert camera_report linked to incident
+    if (incident) {
+      await supabase.from('camera_reports').insert({
+        incident_id:        incident.id,
+        image_path:         imagePath,
+        ai_hazard_detected: detections.length > 0,
+        ai_confidence:      top ? Math.round(top.confidence * 100) : null,
+        ai_hazard_type:     top ? top.class?.toUpperCase() : null,
+      });
+    }
+
+    // 4. Show success
+    setScreenState(STATE_SUCCESS);
     successScale.setValue(0);
     Animated.spring(successScale, {
       toValue: 1, friction: 5, tension: 80, useNativeDriver: true,
     }).start();
-
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {

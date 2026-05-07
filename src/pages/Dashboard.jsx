@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import MapContainer from '../components/MapContainer';
 import {
@@ -11,25 +11,49 @@ import {
   ServerIcon,
   ClockIcon,
 } from '@heroicons/react/24/outline';
+import { supabase } from '../lib/supabase';
 
 const Dashboard = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [scrollPosition, setScrollPosition] = useState(0);
 
-  const emergencyData = {
-    fire:      { active: 2, total: 5,  critical: 1, unitsDeployed: 8,  avgResponseTime: '4.2 min' },
-    medical:   { active: 5, total: 12, critical: 2, unitsDeployed: 6,  avgResponseTime: '6.8 min' },
-    accidents: { active: 3, total: 8,  critical: 1, unitsDeployed: 5,  avgResponseTime: '8.5 min' },
-    rescue:    { active: 3, total: 6,  critical: 2, unitsDeployed: 11, avgResponseTime: '18.5 min' },
-  };
+  const [emergencyData, setEmergencyData] = useState({
+    fire:      { active: 0, total: 0, critical: 0, unitsDeployed: 0, avgResponseTime: '—' },
+    medical:   { active: 0, total: 0, critical: 0, unitsDeployed: 0, avgResponseTime: '—' },
+    accidents: { active: 0, total: 0, critical: 0, unitsDeployed: 0, avgResponseTime: '—' },
+    rescue:    { active: 0, total: 0, critical: 0, unitsDeployed: 0, avgResponseTime: '—' },
+  });
+
+  const loadStats = useCallback(async () => {
+    const { data } = await supabase.from('incidents').select('type, status, severity');
+    if (!data) return;
+    const count = (type, status) =>
+      data.filter(i => i.type === type && i.status === status).length;
+    const total = (type) => data.filter(i => i.type === type).length;
+    setEmergencyData({
+      fire:      { active: count('FIRE', 'active'),           total: total('FIRE'),           critical: count('FIRE', 'active'),      unitsDeployed: 0, avgResponseTime: '—' },
+      medical:   { active: count('MEDICAL', 'active'),        total: total('MEDICAL'),        critical: 0,                            unitsDeployed: 0, avgResponseTime: '—' },
+      accidents: { active: count('VEHICLE', 'active'),        total: total('VEHICLE'),        critical: 0,                            unitsDeployed: 0, avgResponseTime: '—' },
+      rescue:    { active: count('SEARCH_RESCUE', 'active'),  total: total('SEARCH_RESCUE'),  critical: 0,                            unitsDeployed: 0, avgResponseTime: '—' },
+    });
+  }, []);
+
+  useEffect(() => {
+    loadStats();
+    const channel = supabase
+      .channel('dashboard-stats')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, loadStats)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [loadStats]);
 
   const systemStats = {
-    totalIncidents:    Object.values(emergencyData).reduce((sum, c) => sum + c.active, 0),
-    totalCritical:     Object.values(emergencyData).reduce((sum, c) => sum + c.critical, 0),
+    totalIncidents:     Object.values(emergencyData).reduce((sum, c) => sum + c.active, 0),
+    totalCritical:      Object.values(emergencyData).reduce((sum, c) => sum + c.critical, 0),
     totalUnitsDeployed: Object.values(emergencyData).reduce((sum, c) => sum + c.unitsDeployed, 0),
-    systemUptime:      '99.9%',
-    edgeNodesOnline:   4,
-    totalEdgeNodes:    4,
+    systemUptime:       '99.9%',
+    edgeNodesOnline:    4,
+    totalEdgeNodes:     4,
   };
 
   useEffect(() => {

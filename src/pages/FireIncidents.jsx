@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import MapContainer from '../components/MapContainer';
+import { supabase } from '../lib/supabase';
 import {
   FireIcon,
   ClockIcon,
@@ -11,50 +12,46 @@ import {
   BeakerIcon,
 } from '@heroicons/react/24/outline';
 
+function rowToFireIncident(row) {
+  return {
+    id:                  row.id,
+    location:            row.address ?? 'Unknown location',
+    type:                'Fire Incident',
+    severity:            row.severity ?? 'medium',
+    status:              row.status ?? 'active',
+    reportedAt:          new Date(row.created_at),
+    description:         row.description ?? '',
+    structureType:       '—',
+    fireUnitsResponding: [],
+    eta:                 '—',
+  };
+}
+
 const FireIncidents = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedIncident, setSelectedIncident] = useState(null);
 
-  const [fireIncidents] = useState([
-    {
-      id: 'FIRE-2026-001',
-      location: 'SM Mall of Asia, Pasay City',
-      type: 'Structure Fire',
-      severity: 'critical',
-      status: 'active',
-      reportedAt: new Date(Date.now() - 15 * 60 * 1000),
-      description: 'Large fire in food court area, heavy smoke visible',
-      structureType: 'Commercial Building',
-      floorAffected: '2nd Floor - Food Court',
-      fireUnitsResponding: ['FIRE-01', 'FIRE-03', 'FIRE-07', 'LADDER-02'],
-      eta: '3 minutes',
-    },
-    {
-      id: 'FIRE-2026-002',
-      location: 'Barangay 123, Quezon City',
-      type: 'Residential Fire',
-      severity: 'high',
-      status: 'active',
-      reportedAt: new Date(Date.now() - 32 * 60 * 1000),
-      description: 'House fire spreading to adjacent structures',
-      structureType: 'Single Family Home',
-      floorAffected: 'Ground Floor',
-      fireUnitsResponding: ['FIRE-05', 'FIRE-09'],
-      eta: 'On scene',
-    },
-    {
-      id: 'FIRE-2026-003',
-      location: 'EDSA - Ortigas, Mandaluyong',
-      type: 'Vehicle Fire',
-      severity: 'medium',
-      status: 'contained',
-      reportedAt: new Date(Date.now() - 58 * 60 * 1000),
-      description: 'Bus fire on EDSA, traffic affected',
-      structureType: 'Public Transport Vehicle',
-      fireUnitsResponding: ['FIRE-11'],
-      eta: 'On scene',
-    }
-  ]);
+  const [fireIncidents, setFireIncidents] = useState([]);
+
+  useEffect(() => {
+    supabase
+      .from('incidents')
+      .select('*')
+      .eq('type', 'FIRE')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (data) setFireIncidents(data.map(rowToFireIncident));
+      });
+
+    const channel = supabase
+      .channel('fire-incidents-web')
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'incidents', filter: 'type=eq.FIRE' },
+        payload => setFireIncidents(prev => [rowToFireIncident(payload.new), ...prev]))
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, []);
 
   const [fireUnits] = useState([
     { id: 'FIRE-01', status: 'en_route', eta: '2 min' },

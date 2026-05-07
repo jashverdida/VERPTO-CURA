@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constants/theme';
+import { supabase } from '../lib/supabase';
 
 const { width } = Dimensions.get('window');
 
@@ -407,7 +408,7 @@ export default function TriageChatScreen({ navigation, route }) {
     }, 900);
   }, [currentStep, flow, addMessage, scrollToBottom]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     Animated.sequence([
       Animated.timing(submitScale, { toValue: 0.94, duration: 80, useNativeDriver: true }),
       Animated.timing(submitScale, { toValue: 1, duration: 80, useNativeDriver: true }),
@@ -418,6 +419,14 @@ export default function TriageChatScreen({ navigation, route }) {
       Animated.spring(successScale, { toValue: 1, friction: 6, tension: 80, useNativeDriver: true }),
       Animated.timing(successOpacity, { toValue: 1, duration: 280, useNativeDriver: true }),
     ]).start();
+
+    try {
+      await supabase.from('triage_assessments').insert({
+        type:      type,
+        qa_pairs:  qaPairs,
+        photo_url: hazmatPhotoUri ?? null,
+      });
+    } catch (_) {}
 
     setTimeout(() => {
       navigation.reset({

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,72 +11,30 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, BORDER_RADIUS, SPACING, FONT_SIZES, SHADOWS } from '../constants/theme';
+import { supabase } from '../lib/supabase';
 
-const ALERTS = [
-  {
-    id: '1',
-    type: 'critical',
-    icon: 'flame',
-    title: 'Building Fire — 456 Elm St',
-    body: 'Structure fire reported. 3 units dispatched. Evacuation in progress.',
-    time: '2 min ago',
-    read: false,
-  },
-  {
-    id: '2',
-    type: 'critical',
-    icon: 'medical',
-    title: 'Cardiac Arrest — 123 Main St',
-    body: 'Patient unresponsive. Paramedic ETA 4 minutes.',
-    time: '5 min ago',
-    read: false,
-  },
-  {
-    id: '3',
-    type: 'warning',
-    icon: 'car',
-    title: 'Vehicle Collision — Oak Ave',
-    body: 'Multi-vehicle accident. Road blocked. Traffic unit en route.',
-    time: '12 min ago',
-    read: false,
-  },
-  {
-    id: '4',
-    type: 'warning',
-    icon: 'thunderstorm',
-    title: 'Severe Weather Advisory',
-    body: 'Strong winds and heavy rain expected until 9 PM. Flash flood watch active.',
-    time: '34 min ago',
-    read: true,
-  },
-  {
-    id: '5',
-    type: 'info',
-    icon: 'shield-checkmark',
-    title: 'Intrusion Alarm Resolved — 101 Pine Rd',
-    body: 'False alarm confirmed. Unit standing down.',
-    time: '1 hr ago',
-    read: true,
-  },
-  {
-    id: '6',
-    type: 'info',
-    icon: 'people',
-    title: 'Mass Gathering — City Park',
-    body: 'Event of 500+ attendees. 2 units on standby.',
-    time: '2 hr ago',
-    read: true,
-  },
-  {
-    id: '7',
-    type: 'info',
-    icon: 'information-circle',
-    title: 'System Update',
-    body: 'CURA dispatch system updated to v2.4.1. New features available.',
-    time: '3 hr ago',
-    read: true,
-  },
-];
+const ICON_BY_TYPE = { critical: 'flame', warning: 'warning', info: 'information-circle' };
+
+function formatRelativeTime(isoString) {
+  if (!isoString) return 'Just now';
+  const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+  if (diff < 60) return 'Just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+  return `${Math.floor(diff / 86400)} d ago`;
+}
+
+function rowToAlert(row) {
+  return {
+    id:   row.id,
+    type: row.type,
+    icon: ICON_BY_TYPE[row.type] ?? 'information-circle',
+    title: row.title,
+    body:  row.body ?? '',
+    time:  formatRelativeTime(row.created_at),
+    read:  row.read ?? false,
+  };
+}
 
 const TYPE_CONFIG = {
   critical: {
@@ -112,7 +70,23 @@ const FILTERS = ['All', 'Critical', 'Warning', 'Info'];
 
 export default function AlertsScreen() {
   const [activeFilter, setActiveFilter] = useState('All');
-  const [alerts, setAlerts] = useState(ALERTS);
+  const [alerts, setAlerts] = useState([]);
+
+  useEffect(() => {
+    supabase
+      .from('alerts')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => setAlerts((data ?? []).map(rowToAlert)));
+
+    const channel = supabase
+      .channel('alerts-feed')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'alerts' },
+        payload => setAlerts(prev => [rowToAlert(payload.new), ...prev]))
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, []);
 
   const filtered = alerts.filter((a) => {
     if (activeFilter === 'All') return true;
@@ -121,10 +95,15 @@ export default function AlertsScreen() {
 
   const unreadCount = alerts.filter((a) => !a.read).length;
 
-  const markAllRead = () => setAlerts((prev) => prev.map((a) => ({ ...a, read: true })));
+  const markAllRead = () => {
+    setAlerts(prev => prev.map(a => ({ ...a, read: true })));
+    supabase.from('alerts').update({ read: true }).eq('read', false).then(() => {});
+  };
 
-  const markRead = (id) =>
-    setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, read: true } : a)));
+  const markRead = (id) => {
+    setAlerts(prev => prev.map(a => a.id === id ? { ...a, read: true } : a));
+    supabase.from('alerts').update({ read: true }).eq('id', id).then(() => {});
+  };
 
   const renderAlert = ({ item }) => {
     const cfg = TYPE_CONFIG[item.type];
