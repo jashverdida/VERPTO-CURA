@@ -31,7 +31,17 @@ const ROBOFLOW_MODEL_ID       = 'cura-6kotu';
 const ROBOFLOW_VERSION        = '1';
 const ROBOFLOW_API_KEY        = 'HGdgmNOsXRO2ryF7dPpZ';
 const CONFIDENCE_THRESHOLD    = 10;
-const ROBOFLOW_ENDPOINT = `https://detect.roboflow.com/${ROBOFLOW_MODEL_ID}/${ROBOFLOW_VERSION}?api_key=${ROBOFLOW_API_KEY}&confidence=${CONFIDENCE_THRESHOLD}&overlap=30`;
+const ALLOWED_CLASSES = {
+  fire:    ['fire', 'smoke'],
+  vehicle: ['car', 'car-accident'],
+};
+
+function buildEndpoint(emergencyType) {
+  const classes = ALLOWED_CLASSES[emergencyType]?.join('%2C') ?? '';
+  return `https://detect.roboflow.com/${ROBOFLOW_MODEL_ID}/${ROBOFLOW_VERSION}`
+    + `?api_key=${ROBOFLOW_API_KEY}&confidence=${CONFIDENCE_THRESHOLD}&overlap=30`
+    + (classes ? `&classes=${classes}` : '');
+}
 
 // ── Pure helpers ──
 function rfLog(...args) {
@@ -53,9 +63,9 @@ function exifOrientationToRotation(orientation) {
   }
 }
 
-async function detectWithRoboflow(base64Image) {
+async function detectWithRoboflow(base64Image, emergencyType) {
   const cleanBase64 = base64Image.replace(/^data:[^;]+;base64,/, '');
-  const response = await fetch(ROBOFLOW_ENDPOINT, {
+  const response = await fetch(buildEndpoint(emergencyType), {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: cleanBase64,
@@ -77,16 +87,19 @@ function scaleBox(prediction, displaySize, nativeSize) {
 }
 
 function getClassColor(className) {
+  const key = className?.toLowerCase();
   const map = {
-    fire:            COLORS.fireRed,
-    smoke:           COLORS.slate400,
-    'car-accidents': COLORS.accidentOrange,
-    car:             COLORS.medicalBlue,
+    fire:           '#EF4444',
+    smoke:          '#9CA3AF',
+    'car-accident': '#EF4444',
+    car:            '#22C55E',
   };
-  return map[className] ?? COLORS.emerald;
+  return map[key] ?? COLORS.emerald;
 }
 
-export default function CameraScreen({ navigation }) {
+export default function CameraScreen({ navigation, route }) {
+  const emergencyType = route.params?.emergencyType ?? 'fire';
+
   const [facing, setFacing] = useState('back');
   const [permission, requestPermission] = useCameraPermissions();
   const [screenState, setScreenState] = useState(STATE_CAMERA);
@@ -243,9 +256,13 @@ export default function CameraScreen({ navigation }) {
     rfLog('Base64 start:', base64.substring(0, 60));
     const t0 = Date.now();
     try {
-      const result = await detectWithRoboflow(base64);
+      const result = await detectWithRoboflow(base64, emergencyType);
       const responseTime  = Date.now() - t0;
-      const predictions   = result.predictions ?? [];
+      rfLog('Raw predictions:', JSON.stringify(result.predictions ?? []));
+      const allowed     = ALLOWED_CLASSES[emergencyType] ?? [];
+      const predictions = (result.predictions ?? []).filter(p =>
+        allowed.some(c => c.toLowerCase() === p.class?.toLowerCase())
+      );
       const topConfidence = predictions.length
         ? Math.round(Math.max(...predictions.map(p => p.confidence)) * 100)
         : null;
@@ -552,13 +569,7 @@ export default function CameraScreen({ navigation }) {
                     width: box.width, height: box.height,
                     borderColor: color,
                   }]}
-                >
-                  <View style={[styles.boxLabel, { backgroundColor: color }]}>
-                    <Text style={styles.boxLabelText}>
-                      {det.class}  {Math.round(det.confidence * 100)}%
-                    </Text>
-                  </View>
-                </View>
+                />
               );
             })}
           </View>
@@ -624,18 +635,28 @@ export default function CameraScreen({ navigation }) {
             );
           })()}
 
-          {/* Detection summary pills */}
-          {detections.length > 0 && (
-            <View style={styles.detectionSummary}>
-              {detections.map((det, i) => (
-                <View key={i} style={[styles.detectionPill, { borderColor: getClassColor(det.class) }]}>
-                  <View style={[styles.pillDot, { backgroundColor: getClassColor(det.class) }]} />
-                  <Text style={styles.detPillLabel}>{det.class}</Text>
-                  <Text style={styles.detPillConfidence}>{Math.round(det.confidence * 100)}%</Text>
-                </View>
-              ))}
-            </View>
-          )}
+          {/* Top detection per class */}
+          {detections.length > 0 && (() => {
+            const byClass = detections.reduce((acc, det) => {
+              const key = det.class?.toLowerCase();
+              if (!acc[key] || det.confidence > acc[key].confidence) acc[key] = det;
+              return acc;
+            }, {});
+            return (
+              <View style={[styles.detectionSummary, { justifyContent: 'center' }]}>
+                {Object.values(byClass).map((det, i) => {
+                  const color = getClassColor(det.class);
+                  return (
+                    <View key={i} style={[styles.detectionPill, { borderColor: color }]}>
+                      <View style={[styles.pillDot, { backgroundColor: color }]} />
+                      <Text style={styles.detPillLabel}>{det.class.toUpperCase()}</Text>
+                      <Text style={styles.detPillConfidence}>{Math.round(det.confidence * 100)}%</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            );
+          })()}
 
           {/* Confirm button */}
           <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
@@ -659,22 +680,32 @@ export default function CameraScreen({ navigation }) {
             <Text style={styles.successSubtitle}>to Commel</Text>
 
             <View style={styles.successDetails}>
-              <View style={styles.detailRow}>
-                <Ionicons name="shield-checkmark" size={16} color={COLORS.emerald} />
-                <Text style={styles.detailText}>
-                  {detections.length > 0
-                    ? `AI Verified · ${detections.length} Hazard(s) Found`
-                    : 'AI Verified · Manual Confirmation'}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Ionicons name="scan" size={16} color={COLORS.emerald} />
-                <Text style={styles.detailText}>
-                  {detections.length > 0
-                    ? detections.map(d => d.class).join(', ')
-                    : 'No auto-detection'}
-                </Text>
-              </View>
+              {(() => {
+                const HAZARD_CLASSES = ['fire', 'smoke', 'car-accident'];
+                const hazards = [...new Set(
+                  detections
+                    .filter(d => HAZARD_CLASSES.includes(d.class?.toLowerCase()))
+                    .map(d => d.class?.toUpperCase())
+                )];
+                return (
+                  <>
+                    <View style={styles.detailRow}>
+                      <Ionicons name="shield-checkmark" size={16} color={COLORS.emerald} />
+                      <Text style={styles.detailText}>
+                        {hazards.length > 0
+                          ? `AI Verified · ${hazards.length} Hazard(s) Found`
+                          : 'AI Verified · Manual Confirmation'}
+                      </Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Ionicons name="scan" size={16} color={COLORS.emerald} />
+                      <Text style={styles.detailText}>
+                        {hazards.length > 0 ? hazards.join(', ') : 'No hazards detected'}
+                      </Text>
+                    </View>
+                  </>
+                );
+              })()}
               <View style={styles.detailRow}>
                 <Ionicons name="checkmark-circle" size={16} color={COLORS.emerald} />
                 <Text style={styles.detailText}>Report Confirmed</Text>

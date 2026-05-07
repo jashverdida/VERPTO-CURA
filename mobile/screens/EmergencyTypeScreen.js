@@ -144,6 +144,13 @@ export default function EmergencyTypeScreen({ navigation }) {
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
+      {/* Tap background to dismiss */}
+      <TouchableOpacity
+        style={StyleSheet.absoluteFill}
+        activeOpacity={1}
+        onPress={() => navigation.goBack()}
+      />
+
       {/* ── Header ── */}
       <View style={[styles.header, { paddingTop: TOP_PAD }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
