@@ -15,7 +15,6 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import ViewShot from 'react-native-view-shot';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { COLORS, SHADOWS, BORDER_RADIUS, SPACING } from '../constants/theme';
@@ -32,9 +31,10 @@ const ROBOFLOW_MODEL_ID       = 'cura-6kotu';
 const ROBOFLOW_VERSION        = '1';
 const ROBOFLOW_API_KEY        = 'HGdgmNOsXRO2ryF7dPpZ';
 const CONFIDENCE_THRESHOLD    = 10;
+// Class names must match Roboflow exactly (case-sensitive in the &classes= URL param)
 const ALLOWED_CLASSES = {
-  fire:    ['fire', 'smoke'],
-  vehicle: ['car', 'car-accident'],
+  fire:    ['FIRE', 'SMOKE'],
+  vehicle: ['CAR', 'CAR-ACCIDENT'],
 };
 
 function buildEndpoint(emergencyType) {
@@ -117,12 +117,6 @@ export default function CameraScreen({ navigation, route }) {
 
   const cameraRef      = useRef(null);
   const phaseTimers    = useRef([]);
-  const letterboxRef   = useRef(null);
-  const [lbSource, setLbSource] = useState(null);
-
-  const createLetterboxedImage = useCallback((uri, fitW, fitH) => {
-    return new Promise(resolve => setLbSource({ uri, fitW, fitH, resolve }));
-  }, []);
 
   const prepareImageForRoboflow = useCallback(async (uri, exif, origWidth, origHeight) => {
     const rotation = exifOrientationToRotation(exif?.Orientation);
@@ -140,11 +134,11 @@ export default function CameraScreen({ navigation, route }) {
 
     const resized = await ImageManipulator.manipulateAsync(
       uri, actions,
-      { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
+      { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG, base64: true }
     );
 
-    return createLetterboxedImage(resized.uri, fitW, fitH);
-  }, [createLetterboxedImage]);
+    return resized.base64;
+  }, []);
 
   // ── Animations ──
   const flashAnim    = useRef(new Animated.Value(0)).current;
@@ -252,7 +246,8 @@ export default function CameraScreen({ navigation, route }) {
   };
 
   // ── Shared: call Roboflow and transition to results ──
-  const runDetection = async (uri, base64, dotLoop) => {
+  const runDetection = async (displayUri, base64, dotLoop) => {
+    const uri = displayUri;
     rfLog('Sending image...');
     rfLog('Base64 start:', base64.substring(0, 60));
     const t0 = Date.now();
@@ -262,6 +257,7 @@ export default function CameraScreen({ navigation, route }) {
       rfLog('Raw predictions:', JSON.stringify(result.predictions ?? []));
       const allowed     = ALLOWED_CLASSES[emergencyType] ?? [];
       const predictions = (result.predictions ?? []).filter(p =>
+        p.class && p.class !== 'null' &&
         allowed.some(c => c.toLowerCase() === p.class?.toLowerCase())
       );
       const topConfidence = predictions.length
@@ -274,7 +270,7 @@ export default function CameraScreen({ navigation, route }) {
       clearPhaseTimers();
       dotLoop.current && dotLoop.current.stop();
       spinAnim.stopAnimation();
-      setCapturedImageUri(`data:image/jpeg;base64,${base64}`);
+      setCapturedImageUri(uri);
       setImageNativeSize({ width: result.image?.width ?? 640, height: result.image?.height ?? 480 });
       setDetections(predictions);
       setDetectionError(null);
@@ -434,15 +430,15 @@ export default function CameraScreen({ navigation, route }) {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Camera as background layer */}
-      <CameraView ref={cameraRef} style={styles.camera} facing={facing} />
+      {/* CameraView fills container; UI lives inside it so Android renders the preview correctly */}
+      <CameraView ref={cameraRef} style={styles.camera} facing={facing}>
 
-      {/* Flash Overlay */}
-      <Animated.View style={[styles.flashOverlay, { opacity: flashAnim }]} pointerEvents="none" />
+        {/* Flash Overlay */}
+        <Animated.View style={[styles.flashOverlay, { opacity: flashAnim }]} pointerEvents="none" />
 
-      {/* ── Camera State ── */}
-      {screenState === STATE_CAMERA && (
-        <View style={styles.uiOverlay} pointerEvents="box-none">
+        {/* ── Camera State ── */}
+        {screenState === STATE_CAMERA && (
+          <View style={styles.uiOverlay} pointerEvents="box-none">
           {/* Top Controls */}
           <View style={styles.topControls}>
             <TouchableOpacity style={styles.topButton} onPress={handleGoBack}>
@@ -528,7 +524,8 @@ export default function CameraScreen({ navigation, route }) {
             <Text style={styles.captureLabel}>Tap to Capture · Gallery</Text>
           </View>
         </View>
-      )}
+        )}
+      </CameraView>
 
       {/* ── Processing Overlay ── */}
       {screenState === STATE_PROCESSING && (
@@ -754,27 +751,6 @@ export default function CameraScreen({ navigation, route }) {
         </Animated.View>
       )}
 
-      {/* ── Hidden letterbox canvas for 640×640 preprocessing ── */}
-      <ViewShot
-        ref={letterboxRef}
-        style={{ position: 'absolute', top: -1280, left: -1280, width: 640, height: 640 }}
-        options={{ format: 'jpg', quality: 0.9, result: 'base64' }}
-      >
-        <View style={{ width: 640, height: 640, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
-          {lbSource && (
-            <Image
-              source={{ uri: lbSource.uri }}
-              style={{ width: lbSource.fitW, height: lbSource.fitH }}
-              onLoad={() => {
-                letterboxRef.current.capture().then(b64 => {
-                  lbSource.resolve(b64);
-                  setLbSource(null);
-                });
-              }}
-            />
-          )}
-        </View>
-      </ViewShot>
     </View>
   );
 }
@@ -786,7 +762,7 @@ const styles = StyleSheet.create({
   },
 
   camera: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
   },
 
   flashOverlay: {

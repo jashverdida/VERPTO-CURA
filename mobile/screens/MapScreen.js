@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,282 +9,125 @@ import {
   StatusBar,
   Image,
 } from 'react-native';
-import { WebView } from 'react-native-webview';
+import MapView, { Marker, Callout, PROVIDER_GOOGLE } from 'react-native-maps';
+import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, SHADOWS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constants/theme';
 import { supabase } from '../lib/supabase';
-import FireMarkerModal from '../components/FireMarkerModal';
 
-// ── Leaflet HTML ─────────────────────────────────────────────────────────────
-const MAP_HTML = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body, #map { width: 100%; height: 100%; }
-    body { background: #F8FAFC; }
+const INITIAL_REGION = {
+  latitude:      14.5995,
+  longitude:     120.9842,
+  latitudeDelta: 0.04,
+  longitudeDelta: 0.04,
+};
 
-    /* Own report marker */
-    .pin-own {
-      width: 28px; height: 28px; border-radius: 50%;
-      background: #3B82F6; border: 3px solid #fff;
-      box-shadow: 0 2px 8px rgba(59,130,246,0.5);
-      display: flex; align-items: center; justify-content: center;
-    }
-    /* Nearby report marker */
-    .pin-nearby {
-      width: 28px; height: 28px; border-radius: 50%;
-      background: #94A3B8; border: 3px solid #fff;
-      box-shadow: 0 2px 8px rgba(100,116,139,0.4);
-      display: flex; align-items: center; justify-content: center;
-    }
-    .pin-dot { width: 10px; height: 10px; border-radius: 50%; background: #fff; }
+const TYPE_COLOR = {
+  FIRE:          '#EF4444',
+  VEHICLE:       '#F97316',
+  MEDICAL:       '#3B82F6',
+  HAZMAT:        '#8B5CF6',
+  SEARCH_RESCUE: '#14B8A6',
+};
 
-    /* Fire marker */
-    .fire-pin {
-      width: 44px; height: 44px; border-radius: 50%;
-      background: linear-gradient(145deg, #FF4500, #EF4444);
-      border: 3px solid #fff;
-      box-shadow: 0 4px 14px rgba(239,68,68,0.6);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 22px; cursor: pointer;
-      transition: transform 0.15s;
-    }
-    .fire-pin:hover { transform: scale(1.1); }
+function markerColor(type) {
+  return TYPE_COLOR[type] ?? '#6B7280';
+}
 
-    /* Fire ongoing pulse ring */
-    .fire-pin-ongoing::after {
-      content: '';
-      position: absolute;
-      width: 56px; height: 56px;
-      border-radius: 50%;
-      border: 2px solid rgba(239,68,68,0.45);
-      animation: firePulse 1.8s ease-out infinite;
-    }
-    @keyframes firePulse {
-      0%   { transform: scale(0.9); opacity: 0.6; }
-      100% { transform: scale(1.6); opacity: 0; }
-    }
+function formatTime(isoString) {
+  if (!isoString) return 'Just now';
+  const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+  if (diff < 60)   return 'Just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+  return `${Math.floor(diff / 3600)} hr ago`;
+}
 
-    /* Popup */
-    .leaflet-popup-content-wrapper {
-      border-radius: 12px;
-      box-shadow: 0 4px 16px rgba(15,23,42,0.12);
-      padding: 0;
-    }
-    .leaflet-popup-content { margin: 0; }
-    .popup-card { padding: 12px 16px; min-width: 160px; }
-    .popup-label { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 3px; }
-    .popup-title { font-size: 14px; font-weight: 700; color: #0F172A; }
-    .popup-loc { font-size: 11px; color: #64748B; margin-top: 2px; }
-    .badge {
-      display: inline-block; margin-top: 6px;
-      padding: 2px 8px; border-radius: 99px;
-      font-size: 10px; font-weight: 700;
-    }
-    .badge-own { background: #EFF6FF; color: #3B82F6; }
-    .badge-nearby { background: #F1F5F9; color: #64748B; }
-  </style>
-</head>
-<body>
-<div id="map"></div>
-<script>
-  var map = L.map('map', {
-    center: [14.5995, 120.9842],
-    zoom: 14,
-    zoomControl: true,
-    attributionControl: false,
-  });
-
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19,
-  }).addTo(map);
-
-  // Jurisdiction polygon
-  var jurisdictionCoords = [
-    [14.612, 120.970], [14.612, 120.998],
-    [14.587, 120.998], [14.587, 120.970],
-  ];
-  L.polygon(jurisdictionCoords, {
-    color: '#10B981', weight: 2, opacity: 0.8,
-    fillColor: '#10B981', fillOpacity: 0.06, dashArray: '6 4',
-  }).addTo(map).bindTooltip('Jurisdiction: Barangay 123', { permanent: false, direction: 'center' });
-
-  // Helper icons
-  function makeIcon(type) {
-    var cls = type === 'own' ? 'pin-own' : 'pin-nearby';
-    return L.divIcon({
-      className: '',
-      html: '<div class="' + cls + '"><div class="pin-dot"></div></div>',
-      iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -16],
-    });
-  }
-
-  // Own reports
-  var ownReports = [
-    { lat: 14.601, lng: 120.982, title: 'Vehicle Collision', loc: '789 Oak Ave', time: '10 min ago' },
-    { lat: 14.596, lng: 120.975, title: 'Medical Response', loc: '55 Rizal Blvd', time: '32 min ago' },
-  ];
-  ownReports.forEach(function(r) {
-    L.marker([r.lat, r.lng], { icon: makeIcon('own') }).addTo(map)
-      .bindPopup('<div class="popup-card"><div class="popup-label" style="color:#3B82F6">&#9679; OWN REPORT</div><div class="popup-title">' + r.title + '</div><div class="popup-loc">' + r.loc + '</div><span class="badge badge-own">' + r.time + '</span></div>');
-  });
-
-  // Nearby reports
-  var nearbyReports = [
-    { lat: 14.598, lng: 120.986, title: 'Cardiac Arrest', loc: '123 Main St', time: '2 min ago' },
-    { lat: 14.592, lng: 120.979, title: 'Fall Injury', loc: '202 Maple Dr', time: '15 min ago' },
-  ];
-  nearbyReports.forEach(function(r) {
-    L.marker([r.lat, r.lng], { icon: makeIcon('nearby') }).addTo(map)
-      .bindPopup('<div class="popup-card"><div class="popup-label" style="color:#64748B">&#9679; NEARBY</div><div class="popup-title">' + r.title + '</div><div class="popup-loc">' + r.loc + '</div><span class="badge badge-nearby">' + r.time + '</span></div>');
-  });
-
-  // ── Fire markers (injected dynamically) ──
-  var fireMarkers = {};
-
-  function addFireMarker(data) {
-    if (fireMarkers[data.id]) {
-      fireMarkers[data.id].remove();
-    }
-    var extraClass = data.status === 'ongoing' ? ' fire-pin-ongoing' : '';
-    var icon = L.divIcon({
-      className: '',
-      html: '<div style="position:relative;display:inline-flex;align-items:center;justify-content:center;"><div class="fire-pin' + extraClass + '">🔥</div></div>',
-      iconSize: [44, 44],
-      iconAnchor: [22, 22],
-      popupAnchor: [0, -26],
-    });
-    var marker = L.marker([data.lat, data.lng], { icon: icon }).addTo(map);
-    marker.on('click', function() {
-      if (window.ReactNativeWebView) {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'fireMarkerTap',
-          id: data.id,
-          lat: data.lat,
-          lng: data.lng,
-          address: data.address,
-          description: data.description,
-          aiAnalysis: data.aiAnalysis,
-          reportedAt: data.reportedAt,
-          status: data.status,
-          photoUri: data.photoUri || '',
-        }));
-      }
-    });
-    fireMarkers[data.id] = marker;
-  }
-</script>
-</body>
-</html>
-`;
-
-// ── Component ─────────────────────────────────────────────────────────────────
 export default function MapScreen({ navigation }) {
-  const fabScale = useRef(new Animated.Value(1)).current;
+  const fabScale   = useRef(new Animated.Value(1)).current;
+  const mapRef     = useRef(null);
   const [legendVisible, setLegendVisible] = useState(true);
-  const [selectedMarker, setSelectedMarker] = useState(null);
-  const [markerModalVisible, setMarkerModalVisible] = useState(false);
+  const [incidents, setIncidents]         = useState([]);
+  const [userCoords, setUserCoords]       = useState(null);
 
-  const webViewRef = useRef(null);
-  const mapReadyRef = useRef(false);
-
-  // Inject all incidents into the map WebView
-  const syncFireMarkers = useCallback(async () => {
-    if (!mapReadyRef.current || !webViewRef.current) return;
-    const { data } = await supabase
-      .from('incidents')
-      .select('id,lat,lng,address,description,type,status,created_at,image_path');
-    (data ?? []).forEach(r => {
-      const marker = {
-        id:          r.id,
-        lat:         r.lat,
-        lng:         r.lng,
-        address:     r.address ?? '',
-        description: r.description ?? '',
-        status:      r.status ?? 'active',
-        reportedAt:  r.created_at,
-        photoUri:    '',
+  // Get device location once and fly the map there
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const coords = {
+        latitude:       loc.coords.latitude,
+        longitude:      loc.coords.longitude,
+        latitudeDelta:  0.025,
+        longitudeDelta: 0.025,
       };
-      webViewRef.current.injectJavaScript(`addFireMarker(${JSON.stringify(marker)}); true;`);
-    });
+      setUserCoords(coords);
+      mapRef.current?.animateToRegion(coords, 900);
+    })();
   }, []);
+
+  const goToMyLocation = useCallback(() => {
+    if (userCoords) mapRef.current?.animateToRegion(userCoords, 600);
+  }, [userCoords]);
 
   useFocusEffect(
     useCallback(() => {
-      syncFireMarkers();
+      supabase
+        .from('incidents')
+        .select('id,lat,lng,address,description,type,status,created_at')
+        .then(({ data }) => setIncidents(data ?? []));
 
       const channel = supabase
         .channel('map-incidents')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'incidents' },
-          payload => {
-            if (!mapReadyRef.current || !webViewRef.current) return;
-            const r = payload.new;
-            const marker = {
-              id:          r.id,
-              lat:         r.lat,
-              lng:         r.lng,
-              address:     r.address ?? '',
-              description: r.description ?? '',
-              status:      r.status ?? 'active',
-              reportedAt:  r.created_at,
-              photoUri:    '',
-            };
-            webViewRef.current.injectJavaScript(`addFireMarker(${JSON.stringify(marker)}); true;`);
-          })
+          payload => setIncidents(prev => [...prev, payload.new]))
         .subscribe();
 
       return () => supabase.removeChannel(channel);
-    }, [syncFireMarkers])
+    }, [])
   );
 
-  const handleMapLoad = useCallback(() => {
-    mapReadyRef.current = true;
-    syncFireMarkers();
-  }, [syncFireMarkers]);
-
-  const handleMessage = useCallback((event) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      if (data.type === 'fireMarkerTap') {
-        setSelectedMarker(data);
-        setMarkerModalVisible(true);
-      }
-    } catch (e) {}
-  }, []);
-
-  const handleFabPressIn = () => {
-    Animated.spring(fabScale, { toValue: 0.92, useNativeDriver: true }).start();
-  };
-  const handleFabPressOut = () => {
-    Animated.spring(fabScale, { toValue: 1, friction: 4, useNativeDriver: true }).start();
-  };
-  const handleFabPress = () => {
-    navigation.navigate('EmergencyType');
-  };
+  const handleFabPressIn  = () => Animated.spring(fabScale, { toValue: 0.92, useNativeDriver: true }).start();
+  const handleFabPressOut = () => Animated.spring(fabScale, { toValue: 1, friction: 4, useNativeDriver: true }).start();
+  const handleFabPress    = () => navigation.navigate('EmergencyType');
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* Full-screen Map */}
-      <WebView
-        ref={webViewRef}
+      {/* Google Map */}
+      <MapView
+        ref={mapRef}
         style={styles.map}
-        source={{ html: MAP_HTML }}
-        originWhitelist={['*']}
-        javaScriptEnabled
-        domStorageEnabled
-        scrollEnabled={false}
-        bounces={false}
-        onLoadEnd={handleMapLoad}
-        onMessage={handleMessage}
-      />
+        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+        initialRegion={INITIAL_REGION}
+        showsUserLocation
+        showsMyLocationButton={false}
+      >
+        {incidents.filter(inc => inc.lat && inc.lng).map(inc => (
+          <Marker
+            key={inc.id}
+            coordinate={{ latitude: inc.lat, longitude: inc.lng }}
+            pinColor={markerColor(inc.type)}
+          >
+            <Callout tooltip={false}>
+              <View style={styles.callout}>
+                <Text style={styles.calloutType}>{inc.type ?? 'INCIDENT'}</Text>
+                <Text style={styles.calloutAddress} numberOfLines={2}>
+                  {inc.address || 'Unknown location'}
+                </Text>
+                {inc.description ? (
+                  <Text style={styles.calloutDesc} numberOfLines={2}>{inc.description}</Text>
+                ) : null}
+                <Text style={styles.calloutTime}>{formatTime(inc.created_at)}</Text>
+              </View>
+            </Callout>
+          </Marker>
+        ))}
+      </MapView>
 
       {/* Top overlay header */}
       <View style={styles.topBar} pointerEvents="box-none">
@@ -300,28 +143,33 @@ export default function MapScreen({ navigation }) {
               <Text style={styles.topSub}>Barangay 123 · Live</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.topBtn} onPress={() => setLegendVisible(v => !v)}>
-            <Ionicons name="layers-outline" size={20} color={COLORS.slate700} />
-          </TouchableOpacity>
+          <View style={styles.topBtnRow}>
+            <TouchableOpacity style={styles.topBtn} onPress={goToMyLocation}>
+              <Ionicons name="locate-outline" size={20} color={COLORS.slate700} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.topBtn} onPress={() => setLegendVisible(v => !v)}>
+              <Ionicons name="layers-outline" size={20} color={COLORS.slate700} />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Legend */}
         {legendVisible && (
           <View style={styles.legend}>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: COLORS.medicalBlue }]} />
-              <Text style={styles.legendText}>Own Reports</Text>
-            </View>
-            <View style={styles.legendDivider} />
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: COLORS.slate400 }]} />
-              <Text style={styles.legendText}>Nearby</Text>
-            </View>
-            <View style={styles.legendDivider} />
-            <View style={styles.legendItem}>
-              <Text style={styles.legendFireEmoji}>🔥</Text>
-              <Text style={styles.legendText}>Fire Reports</Text>
-            </View>
+            {[
+              { color: '#EF4444', label: 'Fire' },
+              { color: '#F97316', label: 'Vehicle' },
+              { color: '#3B82F6', label: 'Medical' },
+              { color: '#8B5CF6', label: 'HAZMAT' },
+              { color: '#14B8A6', label: 'Rescue' },
+            ].map(({ color, label }, i) => (
+              <React.Fragment key={label}>
+                {i > 0 && <View style={styles.legendDivider} />}
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: color }]} />
+                  <Text style={styles.legendText}>{label}</Text>
+                </View>
+              </React.Fragment>
+            ))}
           </View>
         )}
       </View>
@@ -341,13 +189,6 @@ export default function MapScreen({ navigation }) {
           </TouchableOpacity>
         </Animated.View>
       </View>
-
-      {/* Fire Marker Modal */}
-      <FireMarkerModal
-        visible={markerModalVisible}
-        marker={selectedMarker}
-        onClose={() => setMarkerModalVisible(false)}
-      />
     </View>
   );
 }
@@ -359,6 +200,35 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+
+  // Callout bubble
+  callout: {
+    width: 200,
+    padding: 10,
+  },
+  calloutType: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: COLORS.emerald,
+    letterSpacing: 1,
+    marginBottom: 3,
+  },
+  calloutAddress: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 3,
+  },
+  calloutDesc: {
+    fontSize: 11,
+    color: '#64748B',
+    marginBottom: 4,
+  },
+  calloutTime: {
+    fontSize: 10,
+    color: '#94A3B8',
+    fontWeight: '600',
   },
 
   // Top Bar
@@ -398,6 +268,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginTop: -1,
   },
+  topBtnRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   topBtn: {
     width: 36, height: 36,
     borderRadius: 10,
@@ -417,33 +291,27 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
     alignSelf: 'flex-start',
     ...SHADOWS.small,
-    gap: 10,
+    gap: 8,
+    flexWrap: 'wrap',
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
   },
   legendDot: {
     width: 10, height: 10,
     borderRadius: 5,
     borderWidth: 2,
     borderColor: COLORS.white,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  legendFireEmoji: {
-    fontSize: 12,
   },
   legendText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: COLORS.slate600,
   },
   legendDivider: {
-    width: 1, height: 14,
+    width: 1, height: 12,
     backgroundColor: COLORS.slate200,
   },
 
