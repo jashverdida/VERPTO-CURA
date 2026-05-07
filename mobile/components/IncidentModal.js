@@ -209,6 +209,17 @@ export default function IncidentModal({ visible, incident, onClose }) {
                 <Text style={styles.descriptionLabel}>Incident Details</Text>
                 <Text style={styles.descriptionText}>{incident.description}</Text>
               </View>
+
+              {/* AI Analysis — shown for fire/citizen reports */}
+              {!!incident.aiAnalysis && (
+                <View style={[styles.descriptionContainer, styles.aiAnalysisContainer]}>
+                  <View style={styles.aiAnalysisLabelRow}>
+                    <Ionicons name="shield-checkmark" size={13} color={COLORS.emerald} />
+                    <Text style={[styles.descriptionLabel, { color: COLORS.emerald }]}>AI Analysis</Text>
+                  </View>
+                  <Text style={styles.descriptionText}>{incident.aiAnalysis}</Text>
+                </View>
+              )}
             </View>
 
             {/* Actions */}
@@ -396,6 +407,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: COLORS.slate700,
+  },
+  aiAnalysisContainer: {
+    marginTop: SPACING.sm,
+    borderColor: COLORS.emerald + '30',
+    backgroundColor: COLORS.emerald + '08',
+  },
+  aiAnalysisLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: SPACING.xs,
   },
   actions: {
     flexDirection: 'row',
