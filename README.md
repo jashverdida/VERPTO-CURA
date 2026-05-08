@@ -114,16 +114,23 @@ Your application will be available at **http://localhost:5173** ✨
 
 ---
 
-### 🔐 Web Login Credentials
+### 🔐 Login Credentials
 
-**Demo accounts for testing:**
+**Web Dashboard Accounts:**
 
 | Role | Email | Password |
 |------|-------|----------|
 | Command Center Admin | `admin@gmail.com` | `admin123` |
 | Station Operator | `station@gmail.com` | `station123` |
 
-Use these credentials to access different dashboard views and test various user roles.
+**Mobile App Accounts:**
+
+| Role | Email | Password |
+|------|-------|----------|
+| Citizen Reporter | `citizen@gmail.com` | `citizen123` |
+| Field Responder | `responder@gmail.com` | `responder123` |
+
+Use these credentials to access different dashboard views and test various user roles in both web and mobile platforms.
 
 ---
 
