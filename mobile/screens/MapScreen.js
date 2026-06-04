@@ -39,9 +39,75 @@ const TYPE_COLOR = {
   SEARCH_RESCUE: '#14B8A6',
 };
 
-function markerColor(type) {
-  return TYPE_COLOR[type] ?? '#6B7280';
+const TYPE_ICON = {
+  FIRE:          'flame',
+  VEHICLE:       'car',
+  MEDICAL:       'medkit',
+  HAZMAT:        'flask',
+  SEARCH_RESCUE: 'search',
+};
+
+// ── Incident callout card ─────────────────────────────────────────────────────
+// react-native-maps View-child bitmap capture is broken in this environment —
+// even a plain 52×52 circle with no stem still showed partial. Root cause:
+// the Google Maps native renderer on Android doesn't composite React Native
+// View bitmaps reliably in this SDK/device combination.
+//
+// Solution: use native pinColor (always renders correctly) + a styled Callout
+// that shows the icon, type label, address and time on tap.
+function IncidentCallout({ inc }) {
+  const key   = (inc.type ?? '').toUpperCase();
+  const color = TYPE_COLOR[key] ?? '#6B7280';
+  const icon  = TYPE_ICON[key]  ?? 'warning';
+  return (
+    <View style={calloutStyles.wrap}>
+      <View style={[calloutStyles.badge, { backgroundColor: color }]}>
+        <Ionicons name={icon} size={18} color="#fff" />
+      </View>
+      <View style={calloutStyles.info}>
+        <Text style={[calloutStyles.type, { color }]}>
+          {key.replace('_', ' ')}
+        </Text>
+        <Text style={calloutStyles.address} numberOfLines={2}>
+          {inc.address || 'Unknown location'}
+        </Text>
+        <Text style={calloutStyles.time}>{formatTime(inc.created_at)}</Text>
+      </View>
+    </View>
+  );
 }
+
+const calloutStyles = StyleSheet.create({
+  wrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 10,
+    gap: 10,
+    width: 220,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  badge: {
+    width: 38, height: 38, borderRadius: 19,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  info: { flex: 1 },
+  type: {
+    fontSize: 11, fontWeight: '800', letterSpacing: 0.5,
+    textTransform: 'uppercase', marginBottom: 2,
+  },
+  address: {
+    fontSize: 12, fontWeight: '600', color: '#1E293B', lineHeight: 16,
+  },
+  time: {
+    fontSize: 11, color: '#94A3B8', fontWeight: '500', marginTop: 2,
+  },
+});
 
 function formatTime(isoString) {
   if (!isoString) return 'Just now';
@@ -58,6 +124,9 @@ export default function MapScreen({ navigation }) {
   const mapRef        = useRef(null);
   const [legendVisible, setLegendVisible]   = useState(true);
   const [selectedLegend, setSelectedLegend] = useState(null);
+  // Screen positions for icon badge overlay (React Native Views on top of native pins)
+  const [pinPositions, setPinPositions] = useState({});
+  const [mapPanning, setMapPanning]     = useState(false);
 
   const toggleLegend = () => {
     if (legendVisible) {
@@ -92,10 +161,25 @@ export default function MapScreen({ navigation }) {
     }
   };
   const [incidents, setIncidents]         = useState([]);
+
+  const updatePinPositions = useCallback(async (currentIncidents) => {
+    if (!mapRef.current) return;
+    const active = (currentIncidents ?? incidents).filter(inc => inc.lat && inc.lng);
+    if (!active.length) return;
+    const positions = {};
+    await Promise.all(active.map(async inc => {
+      try {
+        const pt = await mapRef.current.pointForCoordinate({ latitude: inc.lat, longitude: inc.lng });
+        positions[inc.id] = pt;
+      } catch (_) {}
+    }));
+    setPinPositions(positions);
+  }, [incidents]);
   const [userCoords, setUserCoords]       = useState(null);
   const [locationName, setLocationName]   = useState('Loading...');
 
   // Get device location once and fly the map there
+
   useEffect(() => {
     (async () => {
       try {
@@ -282,28 +366,63 @@ export default function MapScreen({ navigation }) {
         initialRegion={INITIAL_REGION}
         showsUserLocation
         showsMyLocationButton={false}
+        onMapReady={() => updatePinPositions()}
+        onRegionChange={() => setMapPanning(true)}
+        onRegionChangeComplete={() => { setMapPanning(false); updatePinPositions(); }}
       >
-        {incidents.filter(inc => inc.lat && inc.lng).map(inc => (
-          <Marker
-            key={inc.id}
-            coordinate={{ latitude: inc.lat, longitude: inc.lng }}
-            pinColor={markerColor(inc.type)}
-          >
-            <Callout tooltip={false}>
-              <View style={styles.callout}>
-                <Text style={styles.calloutType}>{inc.type ?? 'INCIDENT'}</Text>
-                <Text style={styles.calloutAddress} numberOfLines={2}>
-                  {inc.address || 'Unknown location'}
-                </Text>
-                {inc.description ? (
-                  <Text style={styles.calloutDesc} numberOfLines={2}>{inc.description}</Text>
-                ) : null}
-                <Text style={styles.calloutTime}>{formatTime(inc.created_at)}</Text>
-              </View>
-            </Callout>
-          </Marker>
-        ))}
+        {incidents.filter(inc => inc.lat && inc.lng).map(inc => {
+          const key = (inc.type ?? '').toUpperCase();
+          const color = TYPE_COLOR[key] ?? '#6B7280';
+          return (
+            <Marker
+              key={inc.id}
+              coordinate={{ latitude: inc.lat, longitude: inc.lng }}
+              pinColor={color}
+            >
+              <Callout tooltip>
+                <IncidentCallout inc={inc} />
+              </Callout>
+            </Marker>
+          );
+        })}
       </MapView>
+
+      {/* ── Icon badges on pin heads ──────────────────────────────────────────
+          React Native Views (not bitmap-captured markers) placed over each
+          native pin's round head using pointForCoordinate screen positions.
+          Hidden during panning so they don't visually lag behind the map. */}
+      {!mapPanning && incidents.filter(inc => inc.lat && inc.lng && pinPositions[inc.id]).map(inc => {
+        const pos = pinPositions[inc.id];
+        const key  = (inc.type ?? '').toUpperCase();
+        const color = TYPE_COLOR[key] ?? '#6B7280';
+        const icon  = TYPE_ICON[key]  ?? 'warning';
+        return (
+          <View
+            key={`badge-${inc.id}`}
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: pos.x - 22,
+              top:  pos.y - 56,   // centered on native pin head
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              backgroundColor: color,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 3,
+              borderColor: 'rgba(255,255,255,0.95)',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 3 },
+              shadowOpacity: 0.35,
+              shadowRadius: 6,
+              elevation: 10,
+            }}
+          >
+            <Ionicons name={icon} size={22} color="#fff" />
+          </View>
+        );
+      })}
 
       {/* Top overlay header */}
       <View style={styles.topBar} pointerEvents="box-none">
@@ -419,34 +538,6 @@ const styles = StyleSheet.create({
   },
 
   // Callout bubble
-  callout: {
-    width: 200,
-    padding: 10,
-  },
-  calloutType: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: COLORS.emerald,
-    letterSpacing: 1,
-    marginBottom: 3,
-  },
-  calloutAddress: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#0F172A',
-    marginBottom: 3,
-  },
-  calloutDesc: {
-    fontSize: 11,
-    color: '#64748B',
-    marginBottom: 4,
-  },
-  calloutTime: {
-    fontSize: 10,
-    color: '#94A3B8',
-    fontWeight: '600',
-  },
-
   // Top Bar
   topBar: {
     position: 'absolute',
