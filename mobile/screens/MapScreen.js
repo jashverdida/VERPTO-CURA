@@ -16,6 +16,14 @@ import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, SHADOWS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constants/theme';
 import { supabase } from '../lib/supabase';
 
+const LEGEND_TYPES = [
+  { color: '#EF4444', icon: 'flame',  label: 'Fire',    desc: 'Active fire incidents requiring immediate firefighting response.' },
+  { color: '#F97316', icon: 'car',    label: 'Vehicle', desc: 'Traffic accidents, collisions, and road-related emergencies.' },
+  { color: '#3B82F6', icon: 'medkit', label: 'Medical', desc: 'Medical emergencies requiring ambulance or urgent healthcare.' },
+  { color: '#8B5CF6', icon: 'flask',  label: 'HAZMAT',  desc: 'Hazardous material spills, chemical leaks, or toxic incidents.' },
+  { color: '#14B8A6', icon: 'search', label: 'Rescue',  desc: 'Search and rescue for missing persons or trapped individuals.' },
+];
+
 const INITIAL_REGION = {
   latitude:      14.5995,
   longitude:     120.9842,
@@ -44,28 +52,196 @@ function formatTime(isoString) {
 }
 
 export default function MapScreen({ navigation }) {
-  const fabScale   = useRef(new Animated.Value(1)).current;
-  const mapRef     = useRef(null);
-  const [legendVisible, setLegendVisible] = useState(true);
+  const fabScale      = useRef(new Animated.Value(1)).current;
+  const legendAnim    = useRef(new Animated.Value(1)).current;
+  const descAnim      = useRef(new Animated.Value(0)).current;
+  const mapRef        = useRef(null);
+  const [legendVisible, setLegendVisible]   = useState(true);
+  const [selectedLegend, setSelectedLegend] = useState(null);
+
+  const toggleLegend = () => {
+    if (legendVisible) {
+      Animated.timing(legendAnim, { toValue: 0, duration: 160, useNativeDriver: true }).start(
+        () => setLegendVisible(false)
+      );
+      // Also hide any open description
+      Animated.timing(descAnim, { toValue: 0, duration: 120, useNativeDriver: true }).start(
+        () => setSelectedLegend(null)
+      );
+    } else {
+      setLegendVisible(true);
+      Animated.spring(legendAnim, { toValue: 1, friction: 7, tension: 65, useNativeDriver: true }).start();
+    }
+  };
+
+  const handleLegendPress = (index) => {
+    if (selectedLegend === index) {
+      // Tap same icon → slide up and fade out
+      Animated.timing(descAnim, { toValue: 0, duration: 160, useNativeDriver: true })
+        .start(() => setSelectedLegend(null));
+    } else if (selectedLegend !== null) {
+      // Switch to a different icon → quick swap
+      Animated.timing(descAnim, { toValue: 0, duration: 100, useNativeDriver: true }).start(() => {
+        setSelectedLegend(index);
+        Animated.spring(descAnim, { toValue: 1, friction: 7, tension: 65, useNativeDriver: true }).start();
+      });
+    } else {
+      // Nothing open → slide down and fade in
+      setSelectedLegend(index);
+      Animated.spring(descAnim, { toValue: 1, friction: 7, tension: 65, useNativeDriver: true }).start();
+    }
+  };
   const [incidents, setIncidents]         = useState([]);
   const [userCoords, setUserCoords]       = useState(null);
+  const [locationName, setLocationName]   = useState('Loading...');
 
   // Get device location once and fly the map there
   useEffect(() => {
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      const coords = {
-        latitude:       loc.coords.latitude,
-        longitude:      loc.coords.longitude,
-        latitudeDelta:  0.025,
-        longitudeDelta: 0.025,
-      };
-      setUserCoords(coords);
-      mapRef.current?.animateToRegion(coords, 900);
+      try {
+        console.log('[MapScreen] Requesting location permissions...');
+        
+        // Step 1: Request foreground location permission
+        const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
+        console.log('[MapScreen] Foreground permission status:', fgStatus);
+        
+        if (fgStatus !== 'granted') {
+          console.warn('[MapScreen] Foreground location permission denied');
+          setLocationName('Permission Denied');
+          return;
+        }
+
+        // Step 2: Also request background permission (some devices need this)
+        try {
+          const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
+          console.log('[MapScreen] Background permission status:', bgStatus);
+        } catch (bgError) {
+          console.warn('[MapScreen] Background permission not available (OK for foreground)');
+        }
+
+        // Step 3: Check if location services are enabled
+        const isLocationEnabled = await Location.hasServicesEnabledAsync();
+        console.log('[MapScreen] Location services enabled:', isLocationEnabled);
+        
+        if (!isLocationEnabled) {
+          console.warn('[MapScreen] Location services are disabled on device');
+          setLocationName('Location Services Off');
+          return;
+        }
+
+        // Step 4: Try to get last known position first
+        let loc = null;
+        try {
+          console.log('[MapScreen] Attempting to get last known position...');
+          loc = await Location.getLastKnownPositionAsync({
+            maxAge: 60000, // Accept up to 1 minute old
+          });
+          
+          if (loc) {
+            console.log('[MapScreen] Using last known position:', {
+              lat: loc.coords.latitude,
+              lng: loc.coords.longitude,
+            });
+          }
+        } catch (err) {
+          console.warn('[MapScreen] getLastKnownPositionAsync error:', err.message);
+        }
+
+        // Step 5: If no cached location, try current position with generous timeouts
+        if (!loc) {
+          console.log('[MapScreen] No cached location, requesting current position...');
+          
+          try {
+            // Try Balanced accuracy first
+            console.log('[MapScreen] Attempting Balanced accuracy (30s timeout)...');
+            loc = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+              timeout: 30000, // 30 seconds
+              maxAge: 10000,
+            });
+            console.log('[MapScreen] Got location with Balanced accuracy');
+          } catch (balancedErr) {
+            console.warn('[MapScreen] Balanced accuracy failed:', balancedErr.message);
+            
+            try {
+              // Fallback to Low accuracy
+              console.log('[MapScreen] Attempting Low accuracy (30s timeout)...');
+              loc = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.Low,
+                timeout: 30000, // 30 seconds
+                maxAge: 60000,
+              });
+              console.log('[MapScreen] Got location with Low accuracy');
+            } catch (lowErr) {
+              console.warn('[MapScreen] Low accuracy failed:', lowErr.message);
+              
+              try {
+                // Last resort: Lowest accuracy
+                console.log('[MapScreen] Attempting Lowest accuracy (30s timeout)...');
+                loc = await Location.getCurrentPositionAsync({
+                  accuracy: Location.Accuracy.Lowest,
+                  timeout: 30000,
+                  maxAge: 120000,
+                });
+                console.log('[MapScreen] Got location with Lowest accuracy');
+              } catch (lowestErr) {
+                console.error('[MapScreen] All accuracy levels failed:', lowestErr.message);
+                setLocationName('Location Unavailable');
+                return;
+              }
+            }
+          }
+        }
+
+        // Step 6: Update map with location
+        if (loc && loc.coords) {
+          const coords = {
+            latitude:       loc.coords.latitude,
+            longitude:      loc.coords.longitude,
+            latitudeDelta:  0.025,
+            longitudeDelta: 0.025,
+          };
+          setUserCoords(coords);
+          mapRef.current?.animateToRegion(coords, 900);
+          
+          // Step 7: Reverse geocode to get location name
+          try {
+            const reverseGeo = await Location.reverseGeocodeAsync({
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+            });
+            
+            if (reverseGeo && reverseGeo.length > 0) {
+              const address = reverseGeo[0];
+              let locationStr = 'Current Location';
+              
+              if (address.district) {
+                locationStr = address.district;
+              } else if (address.city) {
+                locationStr = address.city;
+              } else if (address.region) {
+                locationStr = address.region;
+              } else if (address.name) {
+                const nameNum = parseInt(address.name);
+                if (isNaN(nameNum)) {
+                  locationStr = address.name;
+                }
+              }
+              
+              setLocationName(locationStr);
+              console.log('[MapScreen] Location name:', locationStr);
+            } else {
+              setLocationName('Current Location');
+            }
+          } catch (reverseGeoError) {
+            console.error('[MapScreen] Reverse geocoding error:', reverseGeoError.message);
+            setLocationName('Current Location');
+          }
+        }
+      } catch (error) {
+        console.error('[MapScreen] Unexpected location error:', error.message);
+        setLocationName('Location Error');
+      }
     })();
   }, []);
 
@@ -140,37 +316,77 @@ export default function MapScreen({ navigation }) {
             />
             <View>
               <Text style={styles.topTitle}>Map View</Text>
-              <Text style={styles.topSub}>Barangay 123 · Live</Text>
+              <Text style={styles.topSub}>{locationName} · Live</Text>
             </View>
           </View>
           <View style={styles.topBtnRow}>
             <TouchableOpacity style={styles.topBtn} onPress={goToMyLocation}>
               <Ionicons name="locate-outline" size={20} color={COLORS.slate700} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.topBtn} onPress={() => setLegendVisible(v => !v)}>
+            <TouchableOpacity style={styles.topBtn} onPress={toggleLegend}>
               <Ionicons name="layers-outline" size={20} color={COLORS.slate700} />
             </TouchableOpacity>
           </View>
         </View>
 
         {legendVisible && (
-          <View style={styles.legend}>
-            {[
-              { color: '#EF4444', label: 'Fire' },
-              { color: '#F97316', label: 'Vehicle' },
-              { color: '#3B82F6', label: 'Medical' },
-              { color: '#8B5CF6', label: 'HAZMAT' },
-              { color: '#14B8A6', label: 'Rescue' },
-            ].map(({ color, label }, i) => (
-              <React.Fragment key={label}>
-                {i > 0 && <View style={styles.legendDivider} />}
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: color }]} />
-                  <Text style={styles.legendText}>{label}</Text>
-                </View>
-              </React.Fragment>
-            ))}
-          </View>
+          <Animated.View style={[styles.legend, {
+            opacity: legendAnim,
+            transform: [{
+              translateY: legendAnim.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }),
+            }],
+          }]}>
+            <View style={styles.legendHeader}>
+              <View style={styles.legendLiveDot} />
+              <Text style={styles.legendTitle}>INCIDENT TYPES</Text>
+            </View>
+            <View style={styles.legendItems}>
+              {LEGEND_TYPES.map(({ color, icon, label }, i) => {
+                const active = selectedLegend === i;
+                return (
+                  <TouchableOpacity
+                    key={label}
+                    style={styles.legendItem}
+                    onPress={() => handleLegendPress(i)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[
+                      styles.legendIcon,
+                      { backgroundColor: color, shadowColor: color },
+                      active && { borderColor: color, borderWidth: 2.5 },
+                    ]}>
+                      <Ionicons name={icon} size={13} color="#FFFFFF" />
+                    </View>
+                    <Text style={[styles.legendText, active && { color: color, fontWeight: '800' }]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </Animated.View>
+        )}
+
+        {selectedLegend !== null && (
+          <Animated.View style={[styles.legendDesc, {
+            opacity: descAnim,
+            transform: [{
+              translateY: descAnim.interpolate({ inputRange: [0, 1], outputRange: [-10, 0] }),
+            }],
+            borderLeftColor: LEGEND_TYPES[selectedLegend].color,
+          }]}>
+            <View style={[styles.legendDescIcon, { backgroundColor: LEGEND_TYPES[selectedLegend].color }]}>
+              <Ionicons name={LEGEND_TYPES[selectedLegend].icon} size={14} color="#fff" />
+            </View>
+            <View style={styles.legendDescBody}>
+              <Text style={[styles.legendDescTitle, { color: LEGEND_TYPES[selectedLegend].color }]}>
+                {LEGEND_TYPES[selectedLegend].label} Emergency
+              </Text>
+              <Text style={styles.legendDescText}>
+                {LEGEND_TYPES[selectedLegend].desc}
+              </Text>
+            </View>
+          </Animated.View>
         )}
       </View>
 
@@ -282,37 +498,104 @@ const styles = StyleSheet.create({
 
   // Legend
   legend: {
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderRadius: BORDER_RADIUS.xl,
+    paddingHorizontal: SPACING.md,
+    paddingTop: 10,
+    paddingBottom: 12,
+    marginTop: SPACING.sm,
+    shadowColor: COLORS.slate900,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 0,
+  },
+  legendHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.white,
-    borderRadius: BORDER_RADIUS.lg,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 8,
-    marginTop: SPACING.sm,
-    alignSelf: 'flex-start',
-    ...SHADOWS.small,
-    gap: 8,
-    flexWrap: 'wrap',
+    gap: 5,
+    marginBottom: 10,
+  },
+  legendLiveDot: {
+    width: 5, height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#10B981',
+  },
+  legendTitle: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: COLORS.slate400,
+    letterSpacing: 2.2,
+  },
+  legendItems: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   legendItem: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
+    flex: 1,
   },
-  legendDot: {
-    width: 10, height: 10,
-    borderRadius: 5,
-    borderWidth: 2,
-    borderColor: COLORS.white,
+  legendIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.25)',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 5,
   },
   legendText: {
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 9,
+    fontWeight: '700',
     color: COLORS.slate600,
+    letterSpacing: 0.2,
   },
-  legendDivider: {
-    width: 1, height: 12,
-    backgroundColor: COLORS.slate200,
+
+  // Legend description card
+  legendDesc: {
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderRadius: BORDER_RADIUS.xl,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 12,
+    marginTop: SPACING.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderLeftWidth: 3,
+    shadowColor: COLORS.slate900,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 0,
+  },
+  legendDescIcon: {
+    width: 36, height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    flexShrink: 0,
+  },
+  legendDescBody: {
+    flex: 1,
+  },
+  legendDescTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+    marginBottom: 2,
+  },
+  legendDescText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: COLORS.slate600,
+    lineHeight: 16,
   },
 
   // FAB

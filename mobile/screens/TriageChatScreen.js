@@ -13,8 +13,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constants/theme';
-import { supabase } from '../lib/supabase';
-
 const { width } = Dimensions.get('window');
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -332,14 +330,11 @@ export default function TriageChatScreen({ navigation, route }) {
   const [isTyping, setIsTyping] = useState(false);
   const [qaPairs, setQaPairs] = useState([]);
   const [isDone, setIsDone] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
   const [hazmatPhotoUri, setHazmatPhotoUri] = useState(null);
 
   const scrollRef = useRef(null);
   const animValues = useRef({});
   const submitScale = useRef(new Animated.Value(1)).current;
-  const successOpacity = useRef(new Animated.Value(0)).current;
-  const successScale = useRef(new Animated.Value(0.85)).current;
 
   // When Camera returns a photo for HAZMAT
   useEffect(() => {
@@ -408,32 +403,18 @@ export default function TriageChatScreen({ navigation, route }) {
     }, 900);
   }, [currentStep, flow, addMessage, scrollToBottom]);
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     Animated.sequence([
       Animated.timing(submitScale, { toValue: 0.94, duration: 80, useNativeDriver: true }),
-      Animated.timing(submitScale, { toValue: 1, duration: 80, useNativeDriver: true }),
-    ]).start();
-
-    setIsSubmitted(true);
-    Animated.parallel([
-      Animated.spring(successScale, { toValue: 1, friction: 6, tension: 80, useNativeDriver: true }),
-      Animated.timing(successOpacity, { toValue: 1, duration: 280, useNativeDriver: true }),
-    ]).start();
-
-    try {
-      await supabase.from('triage_assessments').insert({
-        type:      type,
-        qa_pairs:  qaPairs,
-        photo_url: hazmatPhotoUri ?? null,
+      Animated.timing(submitScale, { toValue: 1,    duration: 80, useNativeDriver: true }),
+    ]).start(() => {
+      navigation.navigate('LocationPicker', {
+        mode:           'triage',
+        triageType:     type,
+        qaPairs,
+        hazmatPhotoUri: hazmatPhotoUri ?? null,
       });
-    } catch (_) {}
-
-    setTimeout(() => {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'MainTabs', params: { screen: 'Map' } }],
-      });
-    }, 2200);
+    });
   };
 
   const topPad = Platform.OS === 'ios' ? 54 : 44;
@@ -653,32 +634,6 @@ export default function TriageChatScreen({ navigation, route }) {
         </View>
       )}
 
-      {/* ── Success overlay ── */}
-      {isSubmitted && (
-        <Animated.View style={[styles.successOverlay, { opacity: successOpacity }]}>
-          <Animated.View style={[styles.successCard, { transform: [{ scale: successScale }] }]}>
-            <View style={[styles.successIconBg, { backgroundColor: color }]}>
-              <Ionicons name="checkmark" size={42} color={COLORS.white} />
-            </View>
-            <Text style={styles.successTitle}>Report Submitted</Text>
-            <Text style={styles.successSub}>Dispatching responders now</Text>
-            <View style={styles.successRows}>
-              <View style={styles.successRow}>
-                <Ionicons name="shield-checkmark" size={14} color={COLORS.emerald} />
-                <Text style={styles.successRowText}>Emergency services notified</Text>
-              </View>
-              <View style={styles.successRow}>
-                <Ionicons name="people" size={14} color={COLORS.emerald} />
-                <Text style={styles.successRowText}>Assessment forwarded to dispatch</Text>
-              </View>
-              <View style={styles.successRow}>
-                <Ionicons name="time" size={14} color={COLORS.emerald} />
-                <Text style={styles.successRowText}>Estimated ETA: 4–8 minutes</Text>
-              </View>
-            </View>
-          </Animated.View>
-        </Animated.View>
-      )}
     </View>
   );
 }

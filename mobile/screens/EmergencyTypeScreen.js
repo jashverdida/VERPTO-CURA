@@ -97,6 +97,8 @@ export default function EmergencyTypeScreen({ navigation }) {
   const pressAnims = useRef(EMERGENCIES.map(() => new Animated.Value(1))).current;
   // Spoke opacity
   const spokeAnims = useRef(EMERGENCIES.map(() => new Animated.Value(0))).current;
+  // Guard so rapid taps can't double-trigger close
+  const isClosing  = useRef(false);
 
   useEffect(() => {
     // 1. Hub fades + scales in
@@ -133,7 +135,32 @@ export default function EmergencyTypeScreen({ navigation }) {
     runPulse(pulse2, 1300);
   }, []);
 
+  const handleClose = () => {
+    if (isClosing.current) return;
+    isClosing.current = true;
+
+    // Items collapse counter-clockwise (reverse stagger order)
+    Animated.parallel([
+      Animated.stagger(
+        20,
+        [...itemAnims].reverse().map(a =>
+          Animated.timing(a, { toValue: 0, duration: 100, useNativeDriver: true })
+        )
+      ),
+      Animated.stagger(
+        20,
+        [...spokeAnims].reverse().map(a =>
+          Animated.timing(a, { toValue: 0, duration: 80, useNativeDriver: true })
+        )
+      ),
+    ]).start(() => {
+      Animated.timing(hubAnim, { toValue: 0, duration: 80, useNativeDriver: true })
+        .start(() => navigation.goBack());
+    });
+  };
+
   const handlePress = (item, index) => {
+    if (isClosing.current) return;
     Animated.sequence([
       Animated.timing(pressAnims[index], { toValue: 0.86, duration: 100, useNativeDriver: true }),
       Animated.timing(pressAnims[index], { toValue: 1,    duration: 120, useNativeDriver: true }),
@@ -144,26 +171,12 @@ export default function EmergencyTypeScreen({ navigation }) {
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      {/* Tap background to dismiss */}
+      {/* Tap background to dismiss with outro */}
       <TouchableOpacity
         style={StyleSheet.absoluteFill}
         activeOpacity={1}
-        onPress={() => navigation.goBack()}
+        onPress={handleClose}
       />
-
-      {/* ── Header ── */}
-      <View style={[styles.header, { paddingTop: TOP_PAD }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={20} color="rgba(255,255,255,0.7)" />
-        </TouchableOpacity>
-        <View style={styles.headerText}>
-          <View style={styles.liveBadge}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>EMERGENCY RESPONSE</Text>
-          </View>
-          <Text style={styles.headerTitle}>Select Type</Text>
-        </View>
-      </View>
 
       {/* ── Radial canvas ── */}
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
@@ -237,10 +250,28 @@ export default function EmergencyTypeScreen({ navigation }) {
               opacity: pulse2.interpolate({ inputRange: [1, 1.85], outputRange: [0.18, 0] }),
             },
           ]} />
-          {/* Hub circle */}
-          <View style={styles.hubCircle}>
+          {/* Hub circle — tap to dismiss */}
+          <TouchableOpacity
+            onPress={handleClose}
+            activeOpacity={0.8}
+            style={styles.hubCircle}
+          >
             <Ionicons name="warning" size={28} color={COLORS.emerald} />
-          </View>
+          </TouchableOpacity>
+        </Animated.View>
+
+        {/* CLOSE label — outside hub container so the label doesn't push the circle
+            up and misalign the pulse rings */}
+        <Animated.View
+          style={{
+            position: 'absolute',
+            left: CX - 40,
+            top: CY + HUB_SIZE / 2 + 7,
+            width: 80,
+            alignItems: 'center',
+            opacity: hubAnim,
+          }}
+        >
           <Text style={styles.hubLabel}>SELECT</Text>
         </Animated.View>
 
@@ -305,6 +336,15 @@ export default function EmergencyTypeScreen({ navigation }) {
         })}
       </View>
 
+      {/* ── Header — rendered after canvas so it always sits on top ── */}
+      <View style={[styles.header, { paddingTop: TOP_PAD }]} pointerEvents="none">
+        <View style={styles.liveBadge}>
+          <View style={styles.liveDot} />
+          <Text style={styles.liveText}>EMERGENCY RESPONSE</Text>
+        </View>
+        <Text style={styles.headerTitle}>Select Type</Text>
+      </View>
+
       {/* Bottom hint */}
       <View style={styles.hintRow}>
         <Ionicons name="tap-water-outline" size={13} color="rgba(255,255,255,0.25)" />
@@ -322,24 +362,12 @@ const styles = StyleSheet.create({
 
   // Header
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 20,
     paddingBottom: 12,
-    gap: 14,
-    zIndex: 10,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  headerText: {
-    flex: 1,
   },
   liveBadge: {
     flexDirection: 'row',

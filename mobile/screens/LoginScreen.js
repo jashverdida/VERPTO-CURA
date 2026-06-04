@@ -8,16 +8,23 @@ import {
   Animated,
   StatusBar,
   Platform,
-  Alert,
   Image,
+  Modal,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constants/theme';
+import { supabase } from '../lib/supabase';
+import { useStyledAlert } from '../utils/useStyledAlert';
 
 export default function LoginScreen({ navigation }) {
+  const { showAlert, AlertComponent } = useStyledAlert();
   const loginScale = useRef(new Animated.Value(1)).current;
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [imageModalVisible, setImageModalVisible] = useState(false);
 
   const handleLoginPressIn = () => {
     Animated.spring(loginScale, { toValue: 0.95, useNativeDriver: true }).start();
@@ -29,30 +36,82 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     const email = identifier.toLowerCase().trim();
-    if (!email.includes('@')) {
-      Alert.alert('Login Failed', 'Please enter a valid email address.');
-      return;
-    }
-
-    // Hardcoded demo credentials
-    if (email === 'admin@email.com')     { navigation.replace('AdminTabs'); return; }
-    if (email === 'station@email.com')   { navigation.replace('StationTabs'); return; }
-    if (email === 'responder@email.com') { navigation.replace('ResponderTabs'); return; }
     
-    // Citizens: accept any email with "@email.com" and any password
-    if (email.includes('@email.com')) {
-      navigation.replace('MainTabs');
+    // Validate email format
+    if (!email) {
+      showAlert('Validation Error', 'Please enter your email address.', 'alert-circle', '#EF4444');
       return;
     }
 
-    Alert.alert('Login Failed', 'Use any email with @email.com (e.g., john@email.com)');
+    if (!email.includes('@')) {
+      showAlert('Login Failed', 'Please enter a valid email address.', 'mail', '#EF4444');
+      return;
+    }
+
+    if (!password || password.length === 0) {
+      showAlert('Validation Error', 'Please enter your password.', 'alert-circle', '#EF4444');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // Hardcoded demo credentials (for testing)
+      if (email === 'admin@email.com' && password === 'admin123') { 
+        navigation.replace('AdminTabs'); 
+        setIsLoading(false);
+        return; 
+      }
+      if (email === 'station@email.com' && password === 'station123') { 
+        navigation.replace('StationTabs'); 
+        setIsLoading(false);
+        return; 
+      }
+      if (email === 'responder@email.com' && password === 'responder123') { 
+        navigation.replace('ResponderTabs'); 
+        setIsLoading(false);
+        return; 
+      }
+
+      // Query citizens table for registered users
+      const { data, error } = await supabase
+        .from('citizens')
+        .select('id, email, password_hash, first_name, last_name')
+        .eq('email', email)
+        .single();
+
+      if (error || !data) {
+        showAlert('Login Failed', 'Email not found. Please register or check your email.', 'alert-circle', '#EF4444');
+        setIsLoading(false);
+        return;
+      }
+
+      // Password validation (note: in production, should use bcrypt for hashing)
+      if (data.password_hash !== password) {
+        showAlert('Login Failed', 'Incorrect password. Please try again.', 'lock-closed', '#EF4444');
+        setIsLoading(false);
+        return;
+      }
+
+      // Save user ID to AsyncStorage
+      await AsyncStorage.setItem('currentUserId', data.id);
+
+      // Login successful
+      console.log('User logged in:', data.email);
+      navigation.replace('MainTabs');
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Login error:', error);
+      showAlert('Login Error', 'An unexpected error occurred. Please try again.', 'alert-circle', '#EF4444');
+      setIsLoading(false);
+    }
   };
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
 
-      {/* Decorative glow orbs — mirrors web landing blobs */}
+      {/* Decorative glow orbs — mirrors splash screen */}
       <View style={styles.orbTopRight} />
       <View style={styles.orbBottomLeft} />
       <View style={styles.orbCenter} />
@@ -105,26 +164,76 @@ export default function LoginScreen({ navigation }) {
               style={styles.input}
               placeholder="Enter your password"
               placeholderTextColor="rgba(255,255,255,0.25)"
-              secureTextEntry
+              secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
             />
+            <TouchableOpacity 
+              onPress={() => setShowPassword(!showPassword)} 
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons 
+                name={showPassword ? 'eye-outline' : 'eye-off-outline'} 
+                size={18} 
+                color="rgba(255,255,255,0.4)" 
+              />
+            </TouchableOpacity>
           </View>
         </View>
 
         <Animated.View style={[{ transform: [{ scale: loginScale }] }, styles.buttonWrapper]}>
           <TouchableOpacity
-            style={styles.loginButton}
+            style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
             onPressIn={handleLoginPressIn}
             onPressOut={handleLoginPressOut}
             onPress={handleLogin}
+            disabled={isLoading}
             activeOpacity={1}
           >
-            <Text style={styles.loginButtonText}>Login</Text>
-            <Ionicons name="arrow-forward" size={20} color={COLORS.white} />
+            <Text style={styles.loginButtonText}>
+              {isLoading ? 'Logging in...' : 'Login'}
+            </Text>
+            {!isLoading && <Ionicons name="arrow-forward" size={20} color={COLORS.white} />}
           </TouchableOpacity>
         </Animated.View>
+
+        {/* Registration Link */}
+        <View style={styles.registrationLinkContainer}>
+          <Text style={styles.registrationLinkText}>Don't have an account? </Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Registration')}>
+            <Text style={styles.registrationLink}>Sign Up</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+      <AlertComponent />
+
+      {/* Profile Image Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={imageModalVisible}
+        onRequestClose={() => setImageModalVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.imageModalOverlay} 
+          activeOpacity={1} 
+          onPress={() => setImageModalVisible(false)}
+        >
+          <View style={styles.imageModalContent}>
+            <TouchableOpacity 
+              style={styles.imageModalCloseButton}
+              onPress={() => setImageModalVisible(false)}
+            >
+              <Ionicons name="close-circle" size={36} color={COLORS.white} />
+            </TouchableOpacity>
+            <Image
+              source={require('../assets/cura-logo.png')}
+              style={styles.imageModalImage}
+              resizeMode="contain"
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -169,7 +278,7 @@ const styles = StyleSheet.create({
   // Header
   header: {
     alignItems: 'center',
-    marginBottom: SPACING.xl,
+    marginBottom: SPACING.lg,
   },
   logo: {
     width: 90,
@@ -199,11 +308,12 @@ const styles = StyleSheet.create({
 
   // Glass card
   card: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.12)',
     borderRadius: BORDER_RADIUS.xxl,
     padding: SPACING.xl,
+    paddingTop: SPACING.xl,
   },
   inputGroup: {
     marginBottom: SPACING.lg,
@@ -253,10 +363,63 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 12,
   },
+  loginButtonDisabled: {
+    opacity: 0.6,
+  },
   loginButtonText: {
     fontSize: FONT_SIZES.lg,
     fontWeight: '700',
     color: COLORS.white,
     marginRight: SPACING.sm,
+  },
+
+  // Registration Link
+  registrationLinkContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: SPACING.lg,
+  },
+  registrationLinkText: {
+    fontSize: FONT_SIZES.sm,
+    color: 'rgba(255,255,255,0.5)',
+  },
+  registrationLink: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
+    color: COLORS.emerald,
+    textDecorationLine: 'underline',
+  },
+
+  // Image Modal Styles
+  imageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageModalContent: {
+    width: '85%',
+    aspectRatio: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: BORDER_RADIUS.xxl,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: COLORS.emerald,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    elevation: 15,
+  },
+  imageModalCloseButton: {
+    position: 'absolute',
+    top: -40,
+    right: 0,
+    zIndex: 20,
+  },
+  imageModalImage: {
+    width: '80%',
+    height: '80%',
   },
 });

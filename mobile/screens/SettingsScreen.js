@@ -9,6 +9,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SHADOWS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constants/theme';
 
@@ -26,7 +27,14 @@ export default function SettingsScreen({ navigation }) {
         { text: "Cancel", style: "cancel" },
         { 
           text: "Logout", 
-          onPress: () => navigation.replace('Login'),
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem('currentUserId');
+              navigation.replace('Login');
+            } catch (error) {
+              console.error('Logout error:', error);
+            }
+          },
           style: 'destructive'
         }
       ]
