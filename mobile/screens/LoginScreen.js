@@ -67,10 +67,10 @@ export default function LoginScreen({ navigation }) {
         setIsLoading(false);
         return; 
       }
-      if (email === 'responder@email.com' && password === 'responder123') { 
-        navigation.replace('ResponderTabs'); 
+      if (email === 'responder@email.com' && password === '123123') {
+        navigation.replace('ResponderTabs');
         setIsLoading(false);
-        return; 
+        return;
       }
 
       // Query citizens table for registered users

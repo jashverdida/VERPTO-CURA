@@ -39,43 +39,36 @@ import AdminDashboardScreen      from './screens/AdminDashboardScreen';
 import StationDashboardScreen    from './screens/StationDashboardScreen';
 import LocationPickerScreen      from './screens/LocationPickerScreen';
 
+// Responder screens
+import ResponderMapScreen        from './screens/ResponderMapScreen';
+import ResponderStatusScreen     from './screens/ResponderStatusScreen';
+import ResponderChatScreen       from './screens/ResponderChatScreen';
+import ResponderProfileScreen    from './screens/ResponderProfileScreen';
+import ResponderAlertsScreen     from './screens/ResponderAlertsScreen';
+
 /* ════════════════════════════════════════════════════════════════════
-   CUSTOM BOTTOM TAB BAR
+   CUSTOM BOTTOM TAB BAR  (shared by Citizens + Responders)
    ══════════════════════════════════════════════════════════════════ */
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const N_TABS  = 5;
 const TAB_W   = SCREEN_W / N_TABS;
 
-// ── Layout: the orb protrudes ABOVE the visible dark bar ──
-// Container (transparent) is taller than BAR_H to allow the protrusion.
-//
-//   Container top ─────────────────────── y=0
-//        [  orb/glow wrapper top  ]       y=0
-//   Bar top ───────────────────────────── y=PROTRUDE
-//        [  orb continues here    ]
-//   Bar bottom ─────────────────────────  y=PROTRUDE+BAR_H
-//
-const PROTRUDE  = 28;   // px the orb rises above the bar top edge
-const ORB_WRAP  = 66;   // wrapper diameter (solid + glow ring padding)
-const ORB_SOLID = 50;   // solid emerald circle diameter
-const BAR_H     = 58;   // dark bar visible content height
+const PROTRUDE  = 28;
+const ORB_WRAP  = 66;
+const ORB_SOLID = 50;
+const BAR_H     = 58;
 
-// Orb wrapper is centred over each tab column.
 const orbTarget = (idx) => idx * TAB_W + (TAB_W - ORB_WRAP) / 2;
 
-// ── Derived vertical metrics inside a tab item (height = BAR_H) ──
-// Orb-wrapper centre Y in container = ORB_WRAP/2 = 33
-// Orb centre relative to bar top    = 33 - PROTRUDE = 5 px below bar top
-// Solid-orb bottom relative to bar  = 5 + ORB_SOLID/2 = 5 + 25 = 30 px
-const FOCUSED_LBL_TOP  = 30 + 5;                  // 35 — just below solid orb
-const INACTIVE_ICON_TOP = Math.round((BAR_H - 21) / 2); // 18 — centres icon in bar
-const INACTIVE_LBL_GAP  = 3;                      // gap between inactive icon & label
+const FOCUSED_LBL_TOP  = 30 + 5;
+const INACTIVE_ICON_TOP = Math.round((BAR_H - 21) / 2);
+const INACTIVE_LBL_GAP  = 3;
 
 const EMERALD = '#10B981';
 
-// ── Tab definitions ──
-const TABS = [
+// ── Citizen tab definitions ──
+const CITIZEN_TABS = [
   { name: 'Profile',  on: 'person',        off: 'person-outline'       },
   { name: 'Status',   on: 'pulse',          off: 'pulse-outline'         },
   { name: 'Map',      on: 'map',            off: 'map-outline'           },
@@ -83,47 +76,67 @@ const TABS = [
   { name: 'Settings', on: 'settings',       off: 'settings-outline'      },
 ];
 
-// ── Per-screen colours ──
-const SCREEN_BASE = [
-  '#04101E',  // Profile  — deepest navy
-  '#031929',  // Status   — dark ocean
-  '#F4F8FC',  // Map      — off-white (avoids harsh pure-white flash)
-  '#0C0518',  // Alerts   — dark violet
-  '#0A1020',  // Settings — dark slate
+// ── Responder tab definitions ──
+const RESPONDER_TABS = [
+  { name: 'Profile',  on: 'person',       off: 'person-outline'        },
+  { name: 'Status',   on: 'list',          off: 'list-outline'          },
+  { name: 'Map',      on: 'map',           off: 'map-outline'           },
+  { name: 'Chat',     on: 'chatbubbles',   off: 'chatbubbles-outline'   },
+  { name: 'Alerts',   on: 'notifications', off: 'notifications-outline' },
 ];
 
-// Gradient overlay pairs: both use rgba (no opaque white) so the
-// cross-fade never "flashes" an opaque cover over the base colour.
-const SCREEN_GRAD = [
-  ['rgba(8,30,68,0.90)',   'rgba(2,8,18,1)'],    // Profile
-  ['rgba(4,38,68,0.90)',   'rgba(2,14,28,1)'],   // Status
-  ['rgba(244,248,252,1)',  'rgba(225,236,248,1)'], // Map — white gradient, no solid pop
-  ['rgba(26,6,52,0.90)',   'rgba(6,2,16,1)'],    // Alerts
-  ['rgba(14,22,46,0.90)',  'rgba(4,10,22,1)'],   // Settings
+// ── Citizen colours ──
+const CITIZEN_SCREEN_BASE = [
+  '#04101E',  // Profile
+  '#031929',  // Status
+  '#F4F8FC',  // Map — light
+  '#0C0518',  // Alerts
+  '#0A1020',  // Settings
+];
+const CITIZEN_SCREEN_GRAD = [
+  ['rgba(8,30,68,0.90)',   'rgba(2,8,18,1)'],
+  ['rgba(4,38,68,0.90)',   'rgba(2,14,28,1)'],
+  ['rgba(244,248,252,1)',  'rgba(225,236,248,1)'],
+  ['rgba(26,6,52,0.90)',   'rgba(6,2,16,1)'],
+  ['rgba(14,22,46,0.90)',  'rgba(4,10,22,1)'],
 ];
 
+// ── Responder colours ──
+const RESPONDER_SCREEN_BASE = [
+  '#04101E',  // Profile
+  '#031929',  // Status
+  '#F4F8FC',  // Map — light
+  '#090F1E',  // Chat
+  '#0A1020',  // Alerts
+];
+const RESPONDER_SCREEN_GRAD = [
+  ['rgba(8,30,68,0.90)',   'rgba(2,8,18,1)'],
+  ['rgba(4,38,68,0.90)',   'rgba(2,14,28,1)'],
+  ['rgba(244,248,252,1)',  'rgba(225,236,248,1)'],
+  ['rgba(12,18,42,0.90)',  'rgba(4,8,22,1)'],
+  ['rgba(14,22,46,0.90)',  'rgba(4,10,22,1)'],
+];
+
+// Map is always index 2 for both citizen and responder tabs
 const isLight = (idx) => idx === 2;
 
-function CustomTabBar({ state, navigation }) {
+/* ── Shared CustomTabBar — accepts tabDefs, screenBase, screenGrad as props ── */
+function CustomTabBar({ state, navigation, tabDefs, screenBase, screenGrad }) {
   const insets = useSafeAreaInsets();
   const light  = isLight(state.index);
 
   const orbX            = useRef(new Animated.Value(orbTarget(state.index))).current;
   const bgAnim          = useRef(new Animated.Value(state.index)).current;
   const fadeIn          = useRef(new Animated.Value(0)).current;
-  // Two independent opacity values so we never call Animated.subtract in render
   const prevGradOpacity = useRef(new Animated.Value(1)).current;
   const curGradOpacity  = useRef(new Animated.Value(0)).current;
-  // Ref tracks current index without stale-closure issues
   const curIdxRef       = useRef(state.index);
   const [gradIds, setGradIds] = useState({ prev: state.index, cur: state.index });
 
-  // Mount fade-in (native driver — opacity only)
   useEffect(() => {
     Animated.timing(fadeIn, { toValue: 1, duration: 500, useNativeDriver: true }).start();
   }, []);
 
-  // Tab change
   useEffect(() => {
     const newIdx = state.index;
     const oldIdx = curIdxRef.current;
@@ -131,25 +144,20 @@ function CustomTabBar({ state, navigation }) {
 
     curIdxRef.current = newIdx;
 
-    // Snapshot prev/cur indices for gradient overlays BEFORE state update
-    // prevGradOpacity starts at 1 (old gradient visible), curGradOpacity at 0
     prevGradOpacity.setValue(1);
     curGradOpacity.setValue(0);
     setGradIds({ prev: oldIdx, cur: newIdx });
 
     Animated.parallel([
-      // Orb slides to new position (native driver — translateX)
       Animated.spring(orbX, {
         toValue: orbTarget(newIdx),
         friction: 6, tension: 60,
         useNativeDriver: true,
       }),
-      // Base background colour fades (must be non-native — backgroundColor)
       Animated.timing(bgAnim, {
         toValue: newIdx, duration: 480,
         useNativeDriver: false,
       }),
-      // Gradient cross-fade: old fades out, new fades in (native — opacity)
       Animated.timing(prevGradOpacity, { toValue: 0, duration: 480, useNativeDriver: true }),
       Animated.timing(curGradOpacity,  { toValue: 1, duration: 480, useNativeDriver: true }),
     ]).start();
@@ -157,7 +165,7 @@ function CustomTabBar({ state, navigation }) {
 
   const animBgColor = bgAnim.interpolate({
     inputRange:  [0, 1, 2, 3, 4],
-    outputRange: SCREEN_BASE,
+    outputRange: screenBase,
   });
 
   const inactiveColor  = light ? 'rgba(0,0,0,0.40)'  : 'rgba(255,255,255,0.45)';
@@ -167,11 +175,8 @@ function CustomTabBar({ state, navigation }) {
   const containerH = BAR_H + insets.bottom;
 
   return (
-    // Outer container matches bar height exactly — orb overflows above via top: -PROTRUDE.
-    // Only opacity animates here (native driver OK).
     <Animated.View style={{ height: containerH, opacity: fadeIn, overflow: 'visible' }}>
 
-      {/* ── Dark bar background — bottom-aligned ── */}
       <Animated.View
         style={[
           tb.barBg,
@@ -182,58 +187,49 @@ function CustomTabBar({ state, navigation }) {
           },
         ]}
       >
-        {/* Previous gradient fades out */}
         <Animated.View
           pointerEvents="none"
           style={[StyleSheet.absoluteFillObject, { opacity: prevGradOpacity }]}
         >
           <LinearGradient
-            colors={SCREEN_GRAD[gradIds.prev]}
+            colors={screenGrad[gradIds.prev]}
             start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
             style={StyleSheet.absoluteFillObject}
           />
         </Animated.View>
-        {/* Current gradient fades in */}
         <Animated.View
           pointerEvents="none"
           style={[StyleSheet.absoluteFillObject, { opacity: curGradOpacity }]}
         >
           <LinearGradient
-            colors={SCREEN_GRAD[gradIds.cur]}
+            colors={screenGrad[gradIds.cur]}
             start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
             style={StyleSheet.absoluteFillObject}
           />
         </Animated.View>
       </Animated.View>
 
-      {/* ── Protruding orb — top=0 so it rises above bar ──
-          Icon lives inside the wrapper so no separate icon in the active tab item.
-          No elevation (causes Android downward shadow); glow rings simulate it.  */}
       <Animated.View
         pointerEvents="none"
         style={[tb.orbWrapper, { transform: [{ translateX: orbX }] }]}
       >
-        {/* Three concentric rings: diffuse → mid → tight glow */}
         <View style={tb.glow3} />
         <View style={tb.glow2} />
         <View style={tb.glow1} />
-        {/* Solid circle */}
         <View style={tb.orbCircle} />
-        {/* Active icon — centred inside the orb */}
         <View style={tb.iconInOrb}>
           <Ionicons
-            name={TABS[state.index]?.on ?? 'help-circle'}
+            name={tabDefs[state.index]?.on ?? 'help-circle'}
             size={26}
             color="#FFFFFF"
           />
         </View>
       </Animated.View>
 
-      {/* ── Tab buttons — inside bar area ── */}
       <View style={[tb.tabRow, { bottom: insets.bottom, height: BAR_H }]}>
         {state.routes.map((route, i) => {
           const focused = state.index === i;
-          const tab = TABS.find(t => t.name === route.name) ?? TABS[0];
+          const tab = tabDefs.find(t => t.name === route.name) ?? tabDefs[0];
           return (
             <TouchableOpacity
               key={route.key}
@@ -244,7 +240,6 @@ function CustomTabBar({ state, navigation }) {
               }}
               activeOpacity={0.7}
             >
-              {/* Inactive tabs: icon in bar; active tab: icon is in the floating orb */}
               {!focused && (
                 <Ionicons
                   name={tab.off}
@@ -275,15 +270,12 @@ function CustomTabBar({ state, navigation }) {
 }
 
 const tb = StyleSheet.create({
-  // Dark bar: bottom-anchored inside the transparent outer container
   barBg: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,
     borderTopWidth: 1,
     overflow: 'hidden',
   },
-
-  // Orb wrapper sits at top=-PROTRUDE so it floats above the bar into screen content
   orbWrapper: {
     position: 'absolute',
     top: -PROTRUDE,
@@ -293,62 +285,50 @@ const tb = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 2,
   },
-
-  // Ring 3 — outermost, most diffuse
   glow3: {
     position: 'absolute',
     width: ORB_WRAP, height: ORB_WRAP,
     borderRadius: ORB_WRAP / 2,
     backgroundColor: 'rgba(16,185,129,0.13)',
   },
-  // Ring 2 — tighter
   glow2: {
     position: 'absolute',
     width: ORB_WRAP - 12, height: ORB_WRAP - 12,
     borderRadius: (ORB_WRAP - 12) / 2,
     backgroundColor: 'rgba(16,185,129,0.22)',
   },
-  // Ring 1 — closest to solid circle
   glow1: {
     position: 'absolute',
     width: ORB_WRAP - 20, height: ORB_WRAP - 20,
     borderRadius: (ORB_WRAP - 20) / 2,
     backgroundColor: 'rgba(16,185,129,0.34)',
   },
-
   orbCircle: {
     width: ORB_SOLID, height: ORB_SOLID,
     borderRadius: ORB_SOLID / 2,
     backgroundColor: EMERALD,
-    // iOS: true radial glow (shadowOffset {0,0} = centred, never downward)
     shadowColor:   EMERALD,
     shadowOffset:  { width: 0, height: 0 },
     shadowOpacity: 1,
     shadowRadius:  14,
-    elevation: 0,  // intentionally 0 — elevation on Android = downward shadow, not glow
+    elevation: 0,
   },
-
-  // Fills orbWrapper so icon is always centred inside the orb
   iconInOrb: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  // Flex row for tab buttons, inside the bar content area
   tabRow: {
     position: 'absolute',
     left: 0, right: 0,
     flexDirection: 'row',
   },
-
   tabItem: {
     flex: 1,
     alignItems: 'center',
     overflow: 'visible',
     zIndex: 1,
   },
-
   label: {
     fontSize: 10,
     letterSpacing: 0.3,
@@ -366,7 +346,14 @@ function MainTabs() {
   return (
     <Tab.Navigator
       initialRouteName="Map"
-      tabBar={(props) => <CustomTabBar {...props} />}
+      tabBar={(props) => (
+        <CustomTabBar
+          {...props}
+          tabDefs={CITIZEN_TABS}
+          screenBase={CITIZEN_SCREEN_BASE}
+          screenGrad={CITIZEN_SCREEN_GRAD}
+        />
+      )}
       screenOptions={{ headerShown: false }}
     >
       <Tab.Screen name="Profile"  component={UserProfileScreen} />
@@ -381,35 +368,22 @@ function MainTabs() {
 function ResponderTabs() {
   return (
     <Tab.Navigator
-      initialRouteName="Dispatch"
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarIcon: ({ focused, color, size }) => {
-          const icons = {
-            Dispatch: focused ? 'navigate'      : 'navigate-outline',
-            Comms:    focused ? 'radio'         : 'radio-outline',
-            Logs:     focused ? 'document-text' : 'document-text-outline',
-            Settings: focused ? 'settings'      : 'settings-outline',
-          };
-          return <Ionicons name={icons[route.name]} size={size} color={color} />;
-        },
-        tabBarActiveTintColor:   COLORS.warning,
-        tabBarInactiveTintColor: COLORS.slate500,
-        tabBarStyle: {
-          backgroundColor: '#121212',
-          borderTopColor:  '#333',
-          borderTopWidth:  2,
-          height:          70,
-          paddingBottom:   15,
-          paddingTop:      10,
-        },
-        tabBarLabelStyle: { fontSize: 12, fontWeight: '800', letterSpacing: 1 },
-      })}
+      initialRouteName="Map"
+      tabBar={(props) => (
+        <CustomTabBar
+          {...props}
+          tabDefs={RESPONDER_TABS}
+          screenBase={RESPONDER_SCREEN_BASE}
+          screenGrad={RESPONDER_SCREEN_GRAD}
+        />
+      )}
+      screenOptions={{ headerShown: false }}
     >
-      <Tab.Screen name="Dispatch" component={ResponderDispatchScreen} />
-      <Tab.Screen name="Comms"    component={ResponderCommsScreen}    />
-      <Tab.Screen name="Logs"     component={ResponderLogsScreen}     />
-      <Tab.Screen name="Settings" component={SettingsScreen}          />
+      <Tab.Screen name="Profile"  component={ResponderProfileScreen} />
+      <Tab.Screen name="Status"   component={ResponderStatusScreen}  />
+      <Tab.Screen name="Map"      component={ResponderMapScreen}     />
+      <Tab.Screen name="Chat"     component={ResponderChatScreen}    />
+      <Tab.Screen name="Alerts"   component={ResponderAlertsScreen}  />
     </Tab.Navigator>
   );
 }
