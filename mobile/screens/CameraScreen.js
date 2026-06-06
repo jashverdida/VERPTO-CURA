@@ -26,23 +26,14 @@ const STATE_PROCESSING = 'processing';
 const STATE_RESULTS = 'results';
 const STATE_SUCCESS = 'success';
 
-// ── Roboflow config ──
-const ROBOFLOW_MODEL_ID       = 'cura-6kotu';
-const ROBOFLOW_VERSION        = '1';
-const ROBOFLOW_API_KEY        = 'HGdgmNOsXRO2ryF7dPpZ';
-const CONFIDENCE_THRESHOLD    = 10;
-// Class names must match Roboflow exactly (case-sensitive in the &classes= URL param)
+// ── AI Backend config ──
+const AI_BACKEND_URL       = 'http://192.168.1.2:8000/detect';
+const CONFIDENCE_THRESHOLD = 10;
 const ALLOWED_CLASSES = {
   fire:    ['FIRE', 'SMOKE'],
-  vehicle: ['CAR', 'CAR-ACCIDENT'],
+  vehicle: ['CAR', 'CAR-ACCIDENT', 'MOTORCYCLE-ACCIDENT'],
 };
-
-function buildEndpoint(emergencyType) {
-  const classes = ALLOWED_CLASSES[emergencyType]?.join('%2C') ?? '';
-  return `https://detect.roboflow.com/${ROBOFLOW_MODEL_ID}/${ROBOFLOW_VERSION}`
-    + `?api_key=${ROBOFLOW_API_KEY}&confidence=${CONFIDENCE_THRESHOLD}&overlap=30`
-    + (classes ? `&classes=${classes}` : '');
-}
+const HAZARD_CLASSES = ['CAR-ACCIDENT', 'MOTORCYCLE-ACCIDENT', 'FIRE', 'SMOKE'];
 
 // ── Pure helpers ──
 function rfLog(...args) {
@@ -50,7 +41,7 @@ function rfLog(...args) {
     month: '2-digit', day: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
   });
-  console.log(`[Roboflow ${ts}]`, ...args);
+  console.log(`[AI Backend ${ts}]`, ...args);
 }
 
 const MODEL_SIZE = 640;
@@ -64,14 +55,17 @@ function exifOrientationToRotation(orientation) {
   }
 }
 
-async function detectWithRoboflow(base64Image, emergencyType) {
+async function detectWithBackend(base64Image, emergencyType) {
   const cleanBase64 = base64Image.replace(/^data:[^;]+;base64,/, '');
-  const response = await fetch(buildEndpoint(emergencyType), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: cleanBase64,
-  });
-  if (!response.ok) throw new Error(`Roboflow API error: ${response.status}`);
+  const response = await fetch(
+    `${AI_BACKEND_URL}?confidence=${CONFIDENCE_THRESHOLD / 100}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: cleanBase64 }),
+    }
+  );
+  if (!response.ok) throw new Error(`AI backend error: ${response.status}`);
   return response.json();
 }
 
@@ -105,6 +99,7 @@ export default function CameraScreen({ navigation, route }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [screenState, setScreenState] = useState(STATE_CAMERA);
   const [processingText, setProcessingText] = useState('');
+  const [torchOn, setTorchOn] = useState(false);
 
   // Detection state
   const [capturedImageUri, setCapturedImageUri] = useState(null);
@@ -118,19 +113,13 @@ export default function CameraScreen({ navigation, route }) {
   const cameraRef      = useRef(null);
   const phaseTimers    = useRef([]);
 
-  const prepareImageForRoboflow = useCallback(async (uri, exif, origWidth, origHeight) => {
+  const prepareImage = useCallback(async (uri, exif, origWidth, origHeight) => {
     const rotation = exifOrientationToRotation(exif?.Orientation);
-    const [effW, effH] = rotation % 180 === 0
-      ? [origWidth, origHeight]
-      : [origHeight, origWidth];
 
-    const scale = Math.min(MODEL_SIZE / effW, MODEL_SIZE / effH);
-    const fitW  = Math.round(effW * scale);
-    const fitH  = Math.round(effH * scale);
-
+    // Send raw image — only correct EXIF rotation, no resizing
+    // YOLO11 handles letterboxing internally on the server
     const actions = [];
     if (rotation !== 0) actions.push({ rotate: rotation });
-    actions.push({ resize: { width: fitW, height: fitH } });
 
     const resized = await ImageManipulator.manipulateAsync(
       uri, actions,
@@ -252,7 +241,7 @@ export default function CameraScreen({ navigation, route }) {
     rfLog('Base64 start:', base64.substring(0, 60));
     const t0 = Date.now();
     try {
-      const result = await detectWithRoboflow(base64, emergencyType);
+      const result = await detectWithBackend(base64, emergencyType);
       const responseTime  = Date.now() - t0;
       rfLog('Raw predictions:', JSON.stringify(result.predictions ?? []));
       const allowed     = ALLOWED_CLASSES[emergencyType] ?? [];
@@ -320,7 +309,7 @@ export default function CameraScreen({ navigation, route }) {
 
     const dotLoop = { current: null };
     startProcessingUI(dotLoop);
-    const preparedBase64 = await prepareImageForRoboflow(photo.uri, photo.exif, photo.width, photo.height);
+    const preparedBase64 = await prepareImage(photo.uri, photo.exif, photo.width, photo.height);
     await runDetection(photo.uri, preparedBase64, dotLoop);
   };
 
@@ -348,7 +337,7 @@ export default function CameraScreen({ navigation, route }) {
 
     const asset = result.assets[0];
     rfLog('Gallery image:', asset.width, 'x', asset.height, '| mimeType:', asset.mimeType);
-    const preparedBase64 = await prepareImageForRoboflow(asset.uri, asset.exif, asset.width, asset.height);
+    const preparedBase64 = await prepareImage(asset.uri, asset.exif, asset.width, asset.height);
     rfLog('Converted to JPEG 640px (EXIF corrected). Base64 start:', preparedBase64.substring(0, 60));
     const dotLoop = { current: null };
     startProcessingUI(dotLoop);
@@ -431,7 +420,7 @@ export default function CameraScreen({ navigation, route }) {
       <StatusBar barStyle="light-content" />
 
       {/* CameraView fills container; UI lives inside it so Android renders the preview correctly */}
-      <CameraView ref={cameraRef} style={styles.camera} facing={facing}>
+      <CameraView ref={cameraRef} style={styles.camera} facing={facing} enableTorch={torchOn}>
 
         {/* Flash Overlay */}
         <Animated.View style={[styles.flashOverlay, { opacity: flashAnim }]} pointerEvents="none" />
@@ -467,27 +456,6 @@ export default function CameraScreen({ navigation, route }) {
 
           {/* Bottom Controls */}
           <View style={styles.bottomControls}>
-            {/* AI Status Pills */}
-            <View style={styles.pillRow}>
-              <View style={styles.pill}>
-                <Ionicons name="checkmark-circle" size={16} color={COLORS.emerald} />
-                <Text style={styles.pillText}>Clear view of scene</Text>
-              </View>
-              <View style={styles.pill}>
-                <Ionicons name="checkmark-circle" size={16} color={COLORS.emerald} />
-                <Text style={styles.pillText}>Good lighting</Text>
-              </View>
-            </View>
-            <View style={styles.pillRowCentered}>
-              <View style={styles.pill}>
-                <Ionicons name="checkmark-circle" size={16} color={COLORS.emerald} />
-                <Text style={styles.pillText}>Steady hands</Text>
-              </View>
-              <View style={styles.pill}>
-                <Ionicons name="wifi" size={16} color={COLORS.warning} />
-                <Text style={styles.pillText}>Strong internet required</Text>
-              </View>
-            </View>
 
             {/* Capture Row */}
             <View style={styles.captureRow}>
@@ -516,8 +484,8 @@ export default function CameraScreen({ navigation, route }) {
                 </Animated.View>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.sideButton}>
-                <Ionicons name="flash" size={24} color={COLORS.white} />
+              <TouchableOpacity style={styles.sideButton} onPress={() => setTorchOn(prev => !prev)}>
+                <Ionicons name={torchOn ? "flash" : "flash-off"} size={24} color={torchOn ? COLORS.warning : COLORS.white} />
               </TouchableOpacity>
             </View>
 
@@ -589,90 +557,88 @@ export default function CameraScreen({ navigation, route }) {
               />
             )}
 
-            {imageDisplaySize.width > 0 && detections.map((det, index) => {
-              const box = scaleBox(det, imageDisplaySize, imageNativeSize);
-              const color = getClassColor(det.class);
-              return (
-                <View
-                  key={index}
-                  style={[styles.boundingBox, {
-                    left: box.left, top: box.top,
-                    width: box.width, height: box.height,
-                    borderColor: color,
-                  }]}
-                />
-              );
-            })}
+            {imageDisplaySize.width > 0 && (() => {
+              if (detections.length === 0) return null;
+              // Pick the highest confidence detection per class
+              const byClass = detections.reduce((acc, det) => {
+                const key = det.class?.toLowerCase();
+                if (!acc[key] || det.confidence > acc[key].confidence) acc[key] = det;
+                return acc;
+              }, {});
+              return Object.values(byClass).map((det, i) => {
+                const box = scaleBox(det, imageDisplaySize, imageNativeSize);
+                const color = getClassColor(det.class);
+                return (
+                  <View
+                    key={i}
+                    style={[styles.boundingBox, {
+                      left: box.left, top: box.top,
+                      width: box.width, height: box.height,
+                      borderColor: color,
+                    }]}
+                  />
+                );
+              });
+            })()}
           </View>
 
-          {/* AI Status Card */}
-          {(() => {
-            const statusDotColor = detectionError
-              ? COLORS.fireRed
-              : apiStatus?.predictionCount > 0 ? COLORS.emerald : COLORS.warning;
-            const statusLabel = detectionError ? 'Error' : 'Completed';
-            return (
-              <View style={styles.aiStatusCard}>
-                <View style={styles.aiStatusHeader}>
-                  <Ionicons name="analytics" size={15} color={COLORS.emerald} />
-                  <Text style={styles.aiStatusTitle}>AI Detection Report</Text>
-                </View>
-                <View style={styles.aiStatusDivider} />
-
-                <View style={styles.aiStatusRow}>
-                  <Text style={styles.aiStatusLabel}>Status</Text>
-                  <View style={styles.aiStatusValueRow}>
-                    <View style={[styles.statusDot, { backgroundColor: statusDotColor }]} />
-                    <Text style={[styles.aiStatusValue, { color: statusDotColor }]}>{statusLabel}</Text>
-                  </View>
-                </View>
-                <View style={styles.aiStatusRow}>
-                  <Text style={styles.aiStatusLabel}>Predictions</Text>
-                  <Text style={styles.aiStatusValue}>
-                    {detectionError ? '—' : `${apiStatus?.predictionCount ?? 0} found`}
-                  </Text>
-                </View>
-                <View style={styles.aiStatusRow}>
-                  <Text style={styles.aiStatusLabel}>Top confidence</Text>
-                  <Text style={styles.aiStatusValue}>
-                    {apiStatus?.topConfidence != null ? `${apiStatus.topConfidence}%` : '—'}
-                  </Text>
-                </View>
-                <View style={styles.aiStatusRow}>
-                  <Text style={styles.aiStatusLabel}>Response time</Text>
-                  <Text style={styles.aiStatusValue}>
-                    {apiStatus?.responseTime != null ? `${apiStatus.responseTime}ms` : '—'}
-                  </Text>
-                </View>
-                <View style={styles.aiStatusRow}>
-                  <Text style={styles.aiStatusLabel}>Threshold</Text>
-                  <Text style={styles.aiStatusValue}>≥{CONFIDENCE_THRESHOLD}% confidence</Text>
-                </View>
-
-                {(detectionError || (!detectionError && detections.length === 0)) && (
-                  <View style={styles.aiStatusNote}>
-                    <Ionicons
-                      name={detectionError ? 'warning-outline' : 'search-outline'}
-                      size={13}
-                      color={detectionError ? COLORS.warning : COLORS.slate400}
-                    />
-                    <Text style={styles.aiStatusNoteText}>
-                      {detectionError
-                        ?? 'No hazards detected above 30% confidence. Try a clearer, closer photo.'}
-                    </Text>
-                  </View>
-                )}
+          {/* Error notice only — AI Status Card removed */}
+          {detectionError && (
+            <View style={styles.aiStatusCard}>
+              <View style={styles.aiStatusNote}>
+                <Ionicons name="warning-outline" size={13} color={COLORS.warning} />
+                <Text style={styles.aiStatusNoteText}>{detectionError}</Text>
               </View>
-            );
-          })()}
+            </View>
+          )}
 
-          {/* Top detection per class */}
-          {detections.length > 0 && (() => {
+          {/* Detection legend / no detection message */}
+          {(() => {
+            const hasHazard = detections.some(d =>
+              HAZARD_CLASSES.includes(d.class?.toUpperCase())
+            );
             const byClass = detections.reduce((acc, det) => {
               const key = det.class?.toLowerCase();
               if (!acc[key] || det.confidence > acc[key].confidence) acc[key] = det;
               return acc;
             }, {});
+
+            // No detections at all
+            if (detections.length === 0) {
+              const label = emergencyType === 'fire'
+                ? 'No fire or smoke detected'
+                : 'No accident detected';
+              return (
+                <View style={[styles.detectionSummary, { justifyContent: 'center' }]}>
+                  <View style={[styles.detectionPill, { borderColor: COLORS.slate400 }]}>
+                    <Ionicons name="checkmark-circle-outline" size={14} color={COLORS.slate400} />
+                    <Text style={[styles.detPillLabel, { color: COLORS.slate400, marginLeft: 4 }]}>
+                      {label}
+                    </Text>
+                  </View>
+                </View>
+              );
+            }
+
+            // Only CAR detected — no actual accident
+            if (emergencyType === 'vehicle' && !hasHazard) {
+              return (
+                <View style={[styles.detectionSummary, { justifyContent: 'center', flexDirection: 'column', alignItems: 'center', gap: 6 }]}>
+                  <View style={[styles.detectionPill, { borderColor: COLORS.slate400 }]}>
+                    <Ionicons name="checkmark-circle-outline" size={14} color={COLORS.slate400} />
+                    <Text style={[styles.detPillLabel, { color: COLORS.slate400, marginLeft: 4 }]}>
+                      No accident detected
+                    </Text>
+                  </View>
+                  <View style={[styles.detectionPill, { borderColor: getClassColor('car') }]}>
+                    <View style={[styles.pillDot, { backgroundColor: getClassColor('car') }]} />
+                    <Text style={styles.detPillLabel}>CAR</Text>
+                  </View>
+                </View>
+              );
+            }
+
+            // Hazard detected — show all class pills
             return (
               <View style={[styles.detectionSummary, { justifyContent: 'center' }]}>
                 {Object.values(byClass).map((det, i) => {
@@ -681,7 +647,6 @@ export default function CameraScreen({ navigation, route }) {
                     <View key={i} style={[styles.detectionPill, { borderColor: color }]}>
                       <View style={[styles.pillDot, { backgroundColor: color }]} />
                       <Text style={styles.detPillLabel}>{det.class.toUpperCase()}</Text>
-                      <Text style={styles.detPillConfidence}>{Math.round(det.confidence * 100)}%</Text>
                     </View>
                   );
                 })}
@@ -1077,6 +1042,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', flexWrap: 'wrap',
     paddingHorizontal: SPACING.md,
     gap: SPACING.sm, marginBottom: SPACING.sm,
+    justifyContent: 'center', alignItems: 'center',
+    width: '100%',
   },
   detectionPill: {
     flexDirection: 'row', alignItems: 'center',

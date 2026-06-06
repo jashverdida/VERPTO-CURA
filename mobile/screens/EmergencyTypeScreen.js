@@ -140,6 +140,27 @@ export default function EmergencyTypeScreen({ navigation }) {
     ]).start(() => item.onSelect(navigation));
   };
 
+  const handleBack = () => {
+    // Reverse bloom — items contract back to center, then hub fades out
+    Animated.parallel([
+      Animated.stagger(
+        40,
+        [...itemAnims].reverse().map(a =>
+          Animated.spring(a, { toValue: 0, friction: 8, tension: 80, useNativeDriver: true })
+        )
+      ),
+      Animated.stagger(
+        40,
+        [...spokeAnims].reverse().map(a =>
+          Animated.timing(a, { toValue: 0, duration: 200, useNativeDriver: true })
+        )
+      ),
+    ]).start(() => {
+      Animated.spring(hubAnim, { toValue: 0, friction: 8, tension: 80, useNativeDriver: true })
+        .start(() => navigation.goBack());
+    });
+  };
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
@@ -148,12 +169,12 @@ export default function EmergencyTypeScreen({ navigation }) {
       <TouchableOpacity
         style={StyleSheet.absoluteFill}
         activeOpacity={1}
-        onPress={() => navigation.goBack()}
+        onPress={handleBack}
       />
 
       {/* ── Header ── */}
       <View style={[styles.header, { paddingTop: TOP_PAD }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
           <Ionicons name="arrow-back" size={20} color="rgba(255,255,255,0.7)" />
         </TouchableOpacity>
         <View style={styles.headerText}>
