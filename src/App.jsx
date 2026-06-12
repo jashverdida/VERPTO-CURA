@@ -9,6 +9,7 @@ import RescueOperations from './pages/RescueOperations';
 import SystemStatus from './pages/SystemStatus';
 import StationManagement from './pages/StationManagement';
 import CuraChat from './pages/CuraChat';
+import ReportArchives from './pages/ReportArchives';
 import UserSettings from './pages/UserSettings';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -61,6 +62,7 @@ function App() {
               <Route path="/system" element={<SystemStatus />} />
               <Route path="/stations" element={<StationManagement />} />
               <Route path="/chat" element={<CuraChat />} />
+              <Route path="/archives" element={<ReportArchives />} />
               <Route path="/settings" element={<UserSettings />} />
             </Routes>
           </div>

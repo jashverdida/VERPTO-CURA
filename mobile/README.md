@@ -1,6 +1,8 @@
-# Project CURA Mobile
+# 📱 Project CURA Mobile
 
-The mobile companion app for Project CURA - Community-Unified Response Application.
+The mobile companion app for Project CURA - Community-Unified Response Application.  
+**Status:** ✅ Complete Hackathon Edition (May 2026)  
+**Platform:** React Native with Expo for iOS & Android
 
 ## Features
 
@@ -65,6 +67,19 @@ mobile/
 | Emerald | `#10B981` | Primary actions, buttons |
 | Slate 200 | `#E2E8F0` | Borders, dividers |
 
+## 🔐 Mobile Login Credentials
+
+**Demo accounts for testing different user roles:**
+
+| Role | Email | Password |
+|------|-------|----------|
+| Citizen Reporter | `citizen@gmail.com` | `citizen123` |
+| Field Responder | `responder@gmail.com` | `responder123` |
+
+Use these credentials to test incident reporting as a citizen or respond to emergencies as a field responder.
+
+---
+
 ## API Keys (Required for Maps)
 
 For full map functionality, you'll need to add Google Maps API keys:
@@ -98,9 +113,37 @@ For full map functionality, you'll need to add Google Maps API keys:
 
 ### 3. Camera Screen
 - Camera permission handling
-- Viewfinder overlay
-- Capture button with animations
-- Photo preview (simulated)
+- Real-time incident documentation
+- AI verification of scene imagery
+
+---
+
+## 📱 Latest Updates
+
+**Current Version:** 1.0.0 (Hackathon Release)  
+✅ Full mobile dashboard with map interface  
+✅ Emergency incident viewing system  
+✅ Real-time incident status display  
+✅ Triage chat interface for assessment  
+✅ Screen navigation and routing  
+✅ Responsive React Native UI  
+
+**Implemented Mobile Features:**
+- Interactive map dashboard with markers
+- Emergency incident list with details
+- Triage assessment chat flow (Medical, Fire, Hazmat, Search & Rescue)
+- Screen navigation between Dashboard, Camera, and Alerts
+- Settings and user profile screens
+- Responsive design for mobile devices
+- Color-coded incident priorities
+- Real-time incident status updates
+
+**Features in Development:**
+- Actual camera photo capture
+- GPS location auto-fill
+- Push notifications
+- Backend data synchronization
+- Offline data caching
 
 ## Authors
 

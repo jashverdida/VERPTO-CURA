@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { COLORS, SHADOWS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constants/theme';
 import { supabase } from '../lib/supabase';
 
@@ -35,7 +36,7 @@ function getDummyAddress(lat, lng) {
 }
 
 // ── Leaflet full-screen location picker HTML ──────────────────────────────────
-const LOCATION_PICKER_HTML = `
+const LOCATION_PICKER_HTML = (initialLat, initialLng) => `
 <!DOCTYPE html>
 <html>
 <head>
@@ -110,8 +111,10 @@ const LOCATION_PICKER_HTML = `
 </div>
 <div id="drag-hint">Drag map to pin location</div>
 <script>
+  var initialLat = ${initialLat};
+  var initialLng = ${initialLng};
   var map=L.map('map',{
-    center:[14.5995,120.9842],zoom:17,
+    center:[initialLat, initialLng],zoom:17,
     zoomControl:false,attributionControl:false,
   });
   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
@@ -166,6 +169,47 @@ export default function ReportScreen({ navigation, route }) {
   const successOpacity = useRef(new Animated.Value(0)).current;
   const successScale = useRef(new Animated.Value(0.82)).current;
   const successCheckScale = useRef(new Animated.Value(0)).current;
+
+  // ── Get user's real GPS location on mount ──
+  useEffect(() => {
+    (async () => {
+      try {
+        console.log('[ReportScreen] Requesting location permission...');
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        
+        if (status !== 'granted') {
+          console.warn('[ReportScreen] Location permission denied');
+          return;
+        }
+
+        const isLocationEnabled = await Location.hasServicesEnabledAsync();
+        if (!isLocationEnabled) {
+          console.warn('[ReportScreen] Location services disabled');
+          return;
+        }
+
+        console.log('[ReportScreen] Fetching GPS location...');
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+          maxAge: 10000,
+          timeout: 5000,
+        });
+
+        console.log('[ReportScreen] GPS acquired:', {
+          lat: loc.coords.latitude,
+          lng: loc.coords.longitude,
+          timestamp: new Date(loc.timestamp).toISOString(),
+        });
+
+        setSelectedLat(loc.coords.latitude);
+        setSelectedLng(loc.coords.longitude);
+        setPendingLat(loc.coords.latitude);
+        setPendingLng(loc.coords.longitude);
+      } catch (error) {
+        console.error('[ReportScreen] Error getting location:', error.message);
+      }
+    })();
+  }, []);
 
   const address = getDummyAddress(selectedLat, selectedLng);
   const pendingAddress = getDummyAddress(pendingLat, pendingLng);
@@ -403,7 +447,7 @@ export default function ReportScreen({ navigation, route }) {
           <View style={styles.pickerMapContainer}>
             <WebView
               style={styles.pickerWebView}
-              source={{ html: LOCATION_PICKER_HTML }}
+              source={{ html: LOCATION_PICKER_HTML(pendingLat, pendingLng) }}
               originWhitelist={['*']}
               javaScriptEnabled
               domStorageEnabled

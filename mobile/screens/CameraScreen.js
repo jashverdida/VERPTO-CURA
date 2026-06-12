@@ -16,7 +16,6 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../lib/supabase';
 import { COLORS, SHADOWS, BORDER_RADIUS, SPACING } from '../constants/theme';
 
 const { width, height } = Dimensions.get('window');
@@ -24,7 +23,6 @@ const { width, height } = Dimensions.get('window');
 const STATE_CAMERA = 'camera';
 const STATE_PROCESSING = 'processing';
 const STATE_RESULTS = 'results';
-const STATE_SUCCESS = 'success';
 
 // ── AI Backend config ──
 const AI_BACKEND_URL       = 'http://192.168.1.2:8000/detect';
@@ -135,8 +133,6 @@ export default function CameraScreen({ navigation, route }) {
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const contentSlide   = useRef(new Animated.Value(0)).current;
   const spinAnim     = useRef(new Animated.Value(0)).current;
-  const successScale = useRef(new Animated.Value(0)).current;
-  const pulseAnim    = useRef(new Animated.Value(1)).current;
   const dotOpacity1  = useRef(new Animated.Value(0.3)).current;
   const dotOpacity2  = useRef(new Animated.Value(0.3)).current;
   const dotOpacity3  = useRef(new Animated.Value(0.3)).current;
@@ -357,57 +353,14 @@ export default function CameraScreen({ navigation, route }) {
     setScreenState(STATE_CAMERA);
   };
 
-  const handleConfirm = async () => {
-    const top = detections.length
-      ? detections.reduce((a, b) => a.confidence > b.confidence ? a : b)
-      : null;
-
-    // 1. Upload image to Supabase Storage
-    let imagePath = null;
-    try {
-      const blob     = await (await fetch(capturedImageUri)).blob();
-      const fileName = `${Date.now()}.jpg`;
-      const { data: storageData, error: storageError } = await supabase.storage
-        .from('camera-reports')
-        .upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
-      if (!storageError) imagePath = storageData.path;
-    } catch (_) {}
-
-    // 2. Insert incident
-    const { data: incident } = await supabase.from('incidents').insert({
-      type:           emergencyType.toUpperCase(),
-      ai_verified:    detections.length > 0,
-      ai_confidence:  top ? Math.round(top.confidence * 100) : null,
-      ai_hazard_type: top ? top.class?.toUpperCase() : null,
-    }).select().single();
-
-    // 3. Insert camera_report linked to incident
-    if (incident) {
-      await supabase.from('camera_reports').insert({
-        incident_id:        incident.id,
-        image_path:         imagePath,
-        ai_hazard_detected: detections.length > 0,
-        ai_confidence:      top ? Math.round(top.confidence * 100) : null,
-        ai_hazard_type:     top ? top.class?.toUpperCase() : null,
-      });
-    }
-
-    // 4. Show success
-    setScreenState(STATE_SUCCESS);
-    successScale.setValue(0);
-    Animated.spring(successScale, {
-      toValue: 1, friction: 5, tension: 80, useNativeDriver: true,
-    }).start();
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.3, duration: 1000, easing: Easing.out(Easing.ease), useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1, duration: 1000, easing: Easing.in(Easing.ease), useNativeDriver: true,
-        }),
-      ])
-    ).start();
+  const handleConfirm = () => {
+    navigation.navigate('LocationPicker', {
+      mode:             'camera',
+      emergencyType,
+      capturedImageUri,
+      detections,
+      apiStatus,
+    });
   };
 
   const handleGoBack = () => {
@@ -557,29 +510,20 @@ export default function CameraScreen({ navigation, route }) {
               />
             )}
 
-            {imageDisplaySize.width > 0 && (() => {
-              if (detections.length === 0) return null;
-              // Pick the highest confidence detection per class
-              const byClass = detections.reduce((acc, det) => {
-                const key = det.class?.toLowerCase();
-                if (!acc[key] || det.confidence > acc[key].confidence) acc[key] = det;
-                return acc;
-              }, {});
-              return Object.values(byClass).map((det, i) => {
-                const box = scaleBox(det, imageDisplaySize, imageNativeSize);
-                const color = getClassColor(det.class);
-                return (
-                  <View
-                    key={i}
-                    style={[styles.boundingBox, {
-                      left: box.left, top: box.top,
-                      width: box.width, height: box.height,
-                      borderColor: color,
-                    }]}
-                  />
-                );
-              });
-            })()}
+            {imageDisplaySize.width > 0 && detections.map((det, i) => {
+              const box = scaleBox(det, imageDisplaySize, imageNativeSize);
+              const color = getClassColor(det.class);
+              return (
+                <View
+                  key={i}
+                  style={[styles.boundingBox, {
+                    left: box.left, top: box.top,
+                    width: box.width, height: box.height,
+                    borderColor: color,
+                  }]}
+                />
+              );
+            })}
           </View>
 
           {/* Error notice only — AI Status Card removed */}
@@ -633,12 +577,13 @@ export default function CameraScreen({ navigation, route }) {
                   <View style={[styles.detectionPill, { borderColor: getClassColor('car') }]}>
                     <View style={[styles.pillDot, { backgroundColor: getClassColor('car') }]} />
                     <Text style={styles.detPillLabel}>CAR</Text>
+                    <Text style={styles.detPillConfidence}>{Math.round(byClass['car'].confidence * 100)}%</Text>
                   </View>
                 </View>
               );
             }
 
-            // Hazard detected — show all class pills
+            // Hazard detected — show all class pills with highest confidence
             return (
               <View style={[styles.detectionSummary, { justifyContent: 'center' }]}>
                 {Object.values(byClass).map((det, i) => {
@@ -647,6 +592,7 @@ export default function CameraScreen({ navigation, route }) {
                     <View key={i} style={[styles.detectionPill, { borderColor: color }]}>
                       <View style={[styles.pillDot, { backgroundColor: color }]} />
                       <Text style={styles.detPillLabel}>{det.class.toUpperCase()}</Text>
+                      <Text style={styles.detPillConfidence}>{Math.round(det.confidence * 100)}%</Text>
                     </View>
                   );
                 })}
@@ -662,59 +608,6 @@ export default function CameraScreen({ navigation, route }) {
         </View>
       )}
 
-      {/* ── Success State ── */}
-      {screenState === STATE_SUCCESS && (
-        <Animated.View style={[styles.stateOverlay, { opacity: overlayOpacity }]}>
-          <Animated.View style={[styles.stateContent, { transform: [{ scale: successScale }] }]}>
-            {/* Pulse ring + checkmark */}
-            <View style={styles.successIconWrap}>
-              <Animated.View style={[styles.pulseRing, { transform: [{ scale: pulseAnim }] }]} />
-              <Ionicons name="checkmark-circle" size={72} color={COLORS.emerald} />
-            </View>
-
-            <Text style={styles.successTitle}>Payload Transmitted</Text>
-            <Text style={styles.successSubtitle}>to Commel</Text>
-
-            <View style={styles.successDetails}>
-              {(() => {
-                const HAZARD_CLASSES = ['fire', 'smoke', 'car-accident'];
-                const hazards = [...new Set(
-                  detections
-                    .filter(d => HAZARD_CLASSES.includes(d.class?.toLowerCase()))
-                    .map(d => d.class?.toUpperCase())
-                )];
-                return (
-                  <>
-                    <View style={styles.detailRow}>
-                      <Ionicons name="shield-checkmark" size={16} color={COLORS.emerald} />
-                      <Text style={styles.detailText}>
-                        {hazards.length > 0
-                          ? `AI Verified · ${hazards.length} Hazard(s) Found`
-                          : 'AI Verified · Manual Confirmation'}
-                      </Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Ionicons name="scan" size={16} color={COLORS.emerald} />
-                      <Text style={styles.detailText}>
-                        {hazards.length > 0 ? hazards.join(', ') : 'No hazards detected'}
-                      </Text>
-                    </View>
-                  </>
-                );
-              })()}
-              <View style={styles.detailRow}>
-                <Ionicons name="checkmark-circle" size={16} color={COLORS.emerald} />
-                <Text style={styles.detailText}>Report Confirmed</Text>
-              </View>
-            </View>
-
-            <TouchableOpacity style={styles.returnButton} onPress={handleGoBack}>
-              <Ionicons name="map" size={20} color={COLORS.white} />
-              <Text style={styles.returnButtonText}>Return to Map</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </Animated.View>
-      )}
 
     </View>
   );
@@ -931,43 +824,6 @@ const styles = StyleSheet.create({
   progressFill: {
     width: '60%', height: '100%', borderRadius: 2,
     backgroundColor: COLORS.emerald,
-  },
-
-  // Success
-  successIconWrap: {
-    width: 120, height: 120,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: SPACING.lg,
-  },
-  pulseRing: {
-    position: 'absolute', width: 120, height: 120, borderRadius: 60,
-    borderWidth: 2, borderColor: COLORS.emerald + '30',
-  },
-  successTitle: {
-    fontSize: 24, fontWeight: '800', color: COLORS.white,
-    letterSpacing: 0.3, marginBottom: 2,
-  },
-  successSubtitle: {
-    fontSize: 16, fontWeight: '600', color: COLORS.emerald,
-    marginBottom: SPACING.xl,
-  },
-  successDetails: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: BORDER_RADIUS.lg, padding: SPACING.md, gap: 12,
-    marginBottom: SPACING.xl, borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)', width: width * 0.8,
-  },
-  detailRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  detailText: { fontSize: 13, fontWeight: '600', color: COLORS.slate300 },
-  returnButton: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: COLORS.emerald,
-    paddingVertical: 16, paddingHorizontal: 32,
-    borderRadius: BORDER_RADIUS.full, gap: 10,
-    ...SHADOWS.emerald,
-  },
-  returnButtonText: {
-    fontSize: 16, fontWeight: '700', color: COLORS.white, letterSpacing: 0.3,
   },
 
   // ── Results State ──

@@ -19,7 +19,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.verpto.curamobile",
       "config": {
-        "googleMapsApiKey": "AIzaSyApIoATDwd3dcVx8ZtNSBbzVeh5rBo51cU"
+        "googleMapsApiKey": "AIzaSyASeu4ipHv3PWUkSsKxdUk725fbSc5pkLk"
       },
       "infoPlist": {
         "NSCameraUsageDescription": "CURA needs camera access to capture emergency incident photos for AI verification.",
@@ -43,7 +43,7 @@
       ],
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyApIoATDwd3dcVx8ZtNSBbzVeh5rBo51cU"
+          "apiKey": "AIzaSyASeu4ipHv3PWUkSsKxdUk725fbSc5pkLk"
         }
       }
     },

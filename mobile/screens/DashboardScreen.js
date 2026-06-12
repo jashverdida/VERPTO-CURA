@@ -14,6 +14,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, SHADOWS, BORDER_RADIUS, SPACING, FONT_SIZES } from '../constants/theme';
 import IncidentModal from '../components/IncidentModal';
 import IncidentCard from '../components/IncidentCard';
+import FireOutModal from '../components/FireOutModal';
+import ProximityAlertModal from '../components/ProximityAlertModal';
 import { MOCK_INCIDENTS, TABS } from '../constants/mockData';
 import { supabase } from '../lib/supabase';
 
@@ -62,6 +64,8 @@ function fireToIncident(row) {
 export default function DashboardScreen({ navigation }) {
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [fireOutModalVisible, setFireOutModalVisible] = useState(false);
+  const [proximityAlertVisible, setProximityAlertVisible] = useState(false);
   const [activeTab, setActiveTab] = useState('All');
   const [fireIncidents, setFireIncidents] = useState([]);
 
@@ -93,6 +97,22 @@ export default function DashboardScreen({ navigation }) {
     setSelectedIncident(null);
   };
 
+  const openFireOutModal = () => {
+    setFireOutModalVisible(true);
+  };
+
+  const closeFireOutModal = () => {
+    setFireOutModalVisible(false);
+  };
+
+  const openProximityAlert = () => {
+    setProximityAlertVisible(true);
+  };
+
+  const closeProximityAlert = () => {
+    setProximityAlertVisible(false);
+  };
+
   // Merge mock incidents with live fire reports
   const allIncidents = useMemo(() => [...fireIncidents, ...MOCK_INCIDENTS], [fireIncidents]);
 
@@ -117,6 +137,23 @@ export default function DashboardScreen({ navigation }) {
             <Text style={styles.headerTitle}>CURA</Text>
             <Text style={styles.headerSubtitle}>Incident Status</Text>
           </View>
+        </View>
+        {/* Demo Buttons */}
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={openProximityAlert}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="alert-circle" size={16} color={COLORS.white} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.fireOutButton}
+            onPress={openFireOutModal}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="flame" size={16} color={COLORS.white} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -161,6 +198,19 @@ export default function DashboardScreen({ navigation }) {
         incident={selectedIncident}
         onClose={closeModal}
       />
+
+      {/* Fire Out Modal */}
+      <FireOutModal
+        visible={fireOutModalVisible}
+        incident={selectedIncident}
+        onClose={closeFireOutModal}
+      />
+
+      {/* Proximity Alert Modal */}
+      <ProximityAlertModal
+        visible={proximityAlertVisible}
+        onClose={closeProximityAlert}
+      />
     </View>
   );
 }
@@ -173,7 +223,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
     paddingTop: Platform.OS === 'ios' ? 54 : 44,
     paddingHorizontal: SPACING.md,
     paddingBottom: SPACING.sm,
@@ -184,6 +234,28 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  headerButton: {
+    width: 36,
+    height: 36,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.warning,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.small,
+  },
+  fireOutButton: {
+    width: 36,
+    height: 36,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.fireRed,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.small,
   },
   logoImage: {
     width: 42,
