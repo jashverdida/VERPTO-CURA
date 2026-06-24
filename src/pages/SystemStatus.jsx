@@ -140,7 +140,7 @@ const SystemStatus = () => {
               </h2>
               <button
                 onClick={() => setSelectedNode(null)}
-                className="btn-secondary"
+                className="px-4 py-2 rounded-lg border-2 border-emerald-600 bg-emerald-600 text-white text-sm font-medium hover:bg-transparent hover:text-emerald-600 active:bg-transparent active:text-emerald-600 transition-colors duration-200 cursor-pointer"
               >
                 Back to Overview
               </button>

@@ -77,6 +77,48 @@ const AI_ESCALATION_MSG = {
   time:   'NOW',
 };
 
+/* ── GPT-5-mini Escalation Analysis ───────────────────────────────────────── */
+
+const GPT_MODEL_RESPONDER = 'gpt-5-mini';
+
+const ESCALATION_SYSTEM_PROMPT_RESPONDER = `You are CURA's emergency escalation AI for field responders in the Philippines.
+Analyze inter-agency comms for escalation signals. Return compact JSON under 2KB.
+Fields: risk_level (LOW|MEDIUM|HIGH|CRITICAL), probability (0-1), triggers[], recommended_actions[] (max 3), auto_dispatch (bool).
+CRITICAL threshold: structural breach + fire spread + residential proximity.`;
+
+function compressPayloadResponder(messages) {
+  const recent = messages.slice(-8);
+  return recent
+    .map(m => `[${m.time}] ${m.name}: ${m.text.slice(0, 120)}`)
+    .join('\n');
+}
+
+async function analyzeEscalationWithGPTResponder(messages) {
+  const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const compressed = compressPayloadResponder(messages);
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: GPT_MODEL_RESPONDER,
+      messages: [
+        { role: 'system', content: ESCALATION_SYSTEM_PROMPT_RESPONDER },
+        { role: 'user', content: `Field comms log:\n\n${compressed}` },
+      ],
+      max_completion_tokens: 2000,
+      response_format: { type: 'json_object' },
+    }),
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return JSON.parse(data.choices[0].message.content);
+}
+
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 function getLastMsg(msgs) {
   return msgs?.length ? msgs[msgs.length - 1] : null;
@@ -106,8 +148,11 @@ export default function ResponderChatScreen() {
   const [pinnedIds,         setPinnedIds]         = useState([1]);     // CMD pinned by default
   const [escalationActive,  setEscalationActive]  = useState(false);
   const [bannerVisible,     setBannerVisible]      = useState(false);
+  const [gptAnalysis,       setGptAnalysis]        = useState(null);
+  const [isAIScanning,      setIsAIScanning]       = useState(false);
 
   const msgAnimMap = useRef({});
+  const aiTimerRef = useRef(null);
   function getMsgAnim(id) {
     if (!msgAnimMap.current[id]) msgAnimMap.current[id] = new Animated.Value(1);
     return msgAnimMap.current[id];
@@ -119,10 +164,16 @@ export default function ResponderChatScreen() {
     timeouts.current = [];
     if (escalationActive) {
       setBannerVisible(true);
+      if (!gptAnalysis) {
+        analyzeEscalationWithGPTResponder(INITIAL_MESSAGES[2])
+          .then(r => { if (r) setGptAnalysis(r); })
+          .catch(console.error);
+      }
       Animated.spring(bannerY, { toValue: 0, friction: 8, tension: 60, useNativeDriver: true }).start();
       const t = setTimeout(() => addMessage(1, AI_ESCALATION_MSG), 600);
       timeouts.current = [t];
     } else {
+      setGptAnalysis(null);
       Animated.timing(bannerY, { toValue: -140, duration: 300, useNativeDriver: true })
         .start(() => setBannerVisible(false));
       setMessages(INITIAL_MESSAGES);
@@ -141,6 +192,26 @@ export default function ResponderChatScreen() {
     setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 80);
   }
 
+  function scheduleAICheck(contactId, threadMessages) {
+    if (escalationActive || threadMessages.length < 3) return;
+    clearTimeout(aiTimerRef.current);
+    setIsAIScanning(true);
+    aiTimerRef.current = setTimeout(async () => {
+      try {
+        const result = await analyzeEscalationWithGPTResponder(threadMessages);
+        if (!result) return;
+        setGptAnalysis(result);
+        if ((result.risk_level === 'HIGH' || result.risk_level === 'CRITICAL') && result.auto_dispatch) {
+          setEscalationActive(true);
+        }
+      } catch (err) {
+        console.error('CURA AI scan failed:', err.message);
+      } finally {
+        setIsAIScanning(false);
+      }
+    }, 1000);
+  }
+
   function sendMessage() {
     const text = inputText.trim();
     if (!text || !selectedContact) return;
@@ -153,11 +224,14 @@ export default function ResponderChatScreen() {
     };
     addMessage(selectedContact.id, msg);
     setInputText('');
+    const updatedThread = [...(messages[selectedContact.id] || []), msg];
+    scheduleAICheck(selectedContact.id, updatedThread);
   }
 
   function openChat(contact) {
     setSelectedContact(contact);
     setView('chat');
+    scheduleAICheck(contact.id, messages[contact.id] || []);
   }
 
   function goBack() {
@@ -207,6 +281,23 @@ export default function ResponderChatScreen() {
               <Text style={styles.escDesc}>
                 Structural breach at <Text style={{ fontWeight: '900' }}>VECO Substation B</Text>. Probability: 89%. Auto-dispatch initiated.
               </Text>
+              {gptAnalysis && (
+                <View style={styles.gptChipsRow}>
+                  <View style={styles.gptChipModel}>
+                    <Text style={styles.gptChipModelText}>GPT-5-mini</Text>
+                  </View>
+                  <View style={styles.gptChip}>
+                    <Text style={styles.gptChipText}>
+                      {gptAnalysis.risk_level} · {Math.round(gptAnalysis.probability * 100)}%
+                    </Text>
+                  </View>
+                  {gptAnalysis.triggers.slice(0, 1).map(t => (
+                    <View key={t} style={styles.gptChipTrigger}>
+                      <Text style={styles.gptChipTriggerText} numberOfLines={1}>{t}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
             <TouchableOpacity onPress={() => setBannerVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Ionicons name="close" size={16} color="rgba(255,255,255,0.6)" />
@@ -364,12 +455,16 @@ export default function ResponderChatScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.chatHeaderName}>{selectedContact.name}</Text>
-              <Text style={[
-                styles.chatHeaderStatus,
-                selectedContact.status === 'online' ? styles.statusOnline : styles.statusOffline,
-              ]}>
-                {selectedContact.status === 'online' ? '● Online' : '○ Offline'}
-              </Text>
+              {isAIScanning ? (
+                <Text style={styles.aiScanningText}>⬤ AI Scanning...</Text>
+              ) : (
+                <Text style={[
+                  styles.chatHeaderStatus,
+                  selectedContact.status === 'online' ? styles.statusOnline : styles.statusOffline,
+                ]}>
+                  {selectedContact.status === 'online' ? '● Online' : '○ Offline'}
+                </Text>
+              )}
             </View>
             <TouchableOpacity
               style={[styles.pinBtn, pinnedIds.includes(selectedContact.id) && styles.pinBtnActive]}
@@ -549,6 +644,29 @@ const styles = StyleSheet.create({
   },
   escTitle: { fontSize: 10, fontWeight: '900', color: '#FCA5A5', letterSpacing: 1.5, marginBottom: 3 },
   escDesc:  { fontSize: FONT_SIZES.sm, color: '#fff', fontWeight: '500', lineHeight: 18 },
+  gptChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 7 },
+  gptChipModel: {
+    paddingHorizontal: 7, paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: 'rgba(239,68,68,0.3)',
+    borderWidth: 1, borderColor: '#EF4444',
+  },
+  gptChipModelText: { fontSize: 9, fontWeight: '900', color: '#FCA5A5', letterSpacing: 0.8 },
+  gptChip: {
+    paddingHorizontal: 7, paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: 'rgba(239,68,68,0.15)',
+    borderWidth: 1, borderColor: 'rgba(239,68,68,0.35)',
+  },
+  gptChipText: { fontSize: 9, fontWeight: '700', color: '#FCA5A5' },
+  gptChipTrigger: {
+    paddingHorizontal: 7, paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+    maxWidth: 180,
+  },
+  gptChipTriggerText: { fontSize: 9, fontWeight: '500', color: 'rgba(255,255,255,0.6)' },
 
   /* List header */
   listHeader: {
@@ -671,6 +789,7 @@ const styles = StyleSheet.create({
   chatAvatarSmallText: { fontSize: 12, fontWeight: '800' },
   chatHeaderName:   { fontSize: FONT_SIZES.md, fontWeight: '700', color: '#fff' },
   chatHeaderStatus: { fontSize: 11, marginTop: 1, fontWeight: '600' },
+  aiScanningText:   { fontSize: 11, marginTop: 1, fontWeight: '700', color: '#FBBF24' },
   statusOnline:  { color: COLORS.emerald },
   statusOffline: { color: '#64748B' },
   pinBtn: {

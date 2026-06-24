@@ -14,6 +14,7 @@ import UserSettings from './pages/UserSettings';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import StationDashboard from './pages/StationDashboard';
+import AITestLab from './pages/AITestLab';
 import './styles/leaflet-overrides.css';
 
 function App() {
@@ -64,6 +65,7 @@ function App() {
               <Route path="/chat" element={<CuraChat />} />
               <Route path="/archives" element={<ReportArchives />} />
               <Route path="/settings" element={<UserSettings />} />
+              <Route path="/ai-test" element={<AITestLab />} />
             </Routes>
           </div>
         </main>

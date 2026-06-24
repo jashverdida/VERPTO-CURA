@@ -72,12 +72,21 @@ export default function LocationPickerScreen({ navigation, route }) {
 
   const { color, label, icon } = resolveType(mode, emergencyType, triageType);
 
-  const [lat, setLat]           = useState(10.3157);
-  const [lng, setLng]           = useState(123.8854);
-  const [address, setAddress]   = useState('Locating...');
+  const STREET_DELTA = 0.003;
+
+  const [lat,        setLat]        = useState(10.3157);
+  const [lng,        setLng]        = useState(123.8854);
+  // Controlled region — the MapView renders exactly this, no animateToRegion needed
+  const [mapRegion,  setMapRegion]  = useState({
+    latitude:      10.3157,
+    longitude:     123.8854,
+    latitudeDelta: STREET_DELTA,
+    longitudeDelta: STREET_DELTA,
+  });
+  const [address,    setAddress]    = useState('Locating...');
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
+  const [isSuccess,  setIsSuccess]  = useState(false);
 
   const mapRef        = useRef(null);
   const isDraggingRef = useRef(false);
@@ -89,23 +98,42 @@ export default function LocationPickerScreen({ navigation, route }) {
   const pulseAnim     = useRef(new Animated.Value(1)).current;
   const geocodeTimer  = useRef(null);
 
+  // Moves the map to a GPS fix — just a state update, no animation API.
+  const goToGPS = useCallback((latitude, longitude) => {
+    setLat(latitude);
+    setLng(longitude);
+    setMapRegion({ latitude, longitude, latitudeDelta: STREET_DELTA, longitudeDelta: STREET_DELTA });
+  }, []);
+
   // ── GPS on mount ──
   useEffect(() => {
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') { reverseGeocode(10.3157, 123.8854); return; }
-        const loc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced, maxAge: 10000, timeout: 6000,
-        });
-        const { latitude, longitude } = loc.coords;
-        setLat(latitude);
-        setLng(longitude);
-        mapRef.current?.animateToRegion(
-          { latitude, longitude, latitudeDelta: 0.008, longitudeDelta: 0.008 },
-          800
-        );
-        reverseGeocode(latitude, longitude);
+        if (status !== 'granted') {
+          reverseGeocode(10.3157, 123.8854);
+          return;
+        }
+
+        // Instant: cached GPS (no satellite wait)
+        const cached = await Location.getLastKnownPositionAsync({ maxAge: 120000 }).catch(() => null);
+        if (cached) {
+          goToGPS(cached.coords.latitude, cached.coords.longitude);
+          reverseGeocode(cached.coords.latitude, cached.coords.longitude);
+        }
+
+        // Precise: live GPS in background
+        try {
+          const live = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+            maxAge: 5000,
+            timeout: 15000,
+          });
+          goToGPS(live.coords.latitude, live.coords.longitude);
+          reverseGeocode(live.coords.latitude, live.coords.longitude);
+        } catch (_) {
+          if (!cached) reverseGeocode(10.3157, 123.8854);
+        }
       } catch (_) {
         reverseGeocode(10.3157, 123.8854);
       }
@@ -156,6 +184,7 @@ export default function LocationPickerScreen({ navigation, route }) {
     setIsDragging(false);
     setLat(region.latitude);
     setLng(region.longitude);
+    setMapRegion(region); // preserves whatever zoom the user dragged to
     Animated.parallel([
       Animated.spring(pinY,      { toValue: 0, friction: 7, tension: 70, useNativeDriver: true }),
       Animated.spring(pinScale,  { toValue: 1, friction: 7, tension: 70, useNativeDriver: true }),
@@ -257,7 +286,7 @@ export default function LocationPickerScreen({ navigation, route }) {
         style={StyleSheet.absoluteFill}
         provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
         customMapStyle={DARK_MAP_STYLE}
-        initialRegion={{ latitude: 10.3157, longitude: 123.8854, latitudeDelta: 0.008, longitudeDelta: 0.008 }}
+        region={mapRegion}
         onRegionChange={handleRegionChange}
         onRegionChangeComplete={handleRegionChangeComplete}
         showsUserLocation

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import MapContainer from '../components/MapContainer';
 import {
@@ -10,12 +10,228 @@ import {
   CheckCircleIcon,
   ServerIcon,
   ClockIcon,
+  XMarkIcon,
+  PrinterIcon,
+  DocumentArrowDownIcon,
 } from '@heroicons/react/24/outline';
 import { supabase } from '../lib/supabase';
+
+function GenerateReportModal({ open, onClose, emergencyData, systemStats, currentTime, emergencyCategories }) {
+  const reportId = `SITREP-${currentTime.getFullYear()}${String(currentTime.getMonth()+1).padStart(2,'0')}${String(currentTime.getDate()).padStart(2,'0')}-${String(currentTime.getHours()).padStart(2,'0')}${String(currentTime.getMinutes()).padStart(2,'0')}`;
+  const opPeriodStart = new Date(currentTime.getTime() - 8 * 60 * 60 * 1000);
+
+  const [preparedBy, setPreparedBy] = useState('');
+  const [remarks, setRemarks] = useState('');
+  const [reportType, setReportType] = useState('SITREP');
+
+  const handleDownload = () => {
+    const lines = [
+      `CURA EMERGENCY COMMAND & RESPONSE AUTHORITY`,
+      `${reportType} — ${reportId}`,
+      `Date/Time: ${currentTime.toLocaleString()}`,
+      `Operational Period: ${opPeriodStart.toLocaleTimeString()} – ${currentTime.toLocaleTimeString()}`,
+      `Prepared by: ${preparedBy || 'Command Center Operator'}`,
+      ``,
+      `INCIDENT SUMMARY`,
+      `Total Active Incidents,${systemStats.totalIncidents}`,
+      `Critical Cases,${systemStats.totalCritical}`,
+      `Units Deployed,${systemStats.totalUnitsDeployed}`,
+      ``,
+      `INCIDENT BREAKDOWN BY TYPE`,
+      `Type,Active,Total Reported,Critical,Units Deployed`,
+      ...emergencyCategories.map(c => `${c.name},${c.data.active},${c.data.total},${c.data.critical},${c.data.unitsDeployed}`),
+      ``,
+      `INFRASTRUCTURE`,
+      `Edge Nodes Online,${systemStats.edgeNodesOnline} of ${systemStats.totalEdgeNodes}`,
+      `System Uptime,${systemStats.systemUptime}`,
+      ``,
+      `REMARKS`,
+      remarks || '—',
+    ];
+    const csv = lines.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${reportId}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (!open) return null;
+
+  const totalActive = emergencyCategories.reduce((s, c) => s + c.data.active, 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto z-10 border border-slate-200">
+
+        {/* Title Bar */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 bg-slate-800 rounded-t-xl">
+          <div className="flex items-center gap-3">
+            <DocumentArrowDownIcon className="w-4 h-4 text-slate-300" />
+            <span className="text-sm font-semibold text-white tracking-wide">Generate Situation Report</span>
+            <span className="text-xs text-slate-400 font-mono">{reportId}</span>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+            <XMarkIcon className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-5">
+
+          {/* Report Metadata */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Report Type</label>
+              <select
+                value={reportType}
+                onChange={e => setReportType(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option>SITREP</option>
+                <option>Incident Summary</option>
+                <option>End-of-Shift Report</option>
+                <option>Critical Incident Report</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">Prepared By</label>
+              <input
+                type="text"
+                placeholder="e.g. Opr. Santos"
+                value={preparedBy}
+                onChange={e => setPreparedBy(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+
+          {/* Report Meta Info Row */}
+          <div className="flex items-center gap-4 px-4 py-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600">
+            <div><span className="font-semibold text-slate-500">Date/Time:</span> {currentTime.toLocaleString()}</div>
+            <div className="w-px h-4 bg-slate-300" />
+            <div><span className="font-semibold text-slate-500">Op. Period:</span> {opPeriodStart.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} – {currentTime.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</div>
+            <div className="w-px h-4 bg-slate-300" />
+            <div className="flex items-center gap-1.5">
+              <div className={`w-2 h-2 rounded-full ${totalActive > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+              <span className="font-semibold text-slate-700">{totalActive > 0 ? `${totalActive} Active` : 'All Clear'}</span>
+            </div>
+          </div>
+
+          {/* Incident Breakdown Table */}
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Incident Breakdown</p>
+            <table className="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+              <thead>
+                <tr className="bg-slate-100 text-slate-600 text-xs">
+                  <th className="text-left px-4 py-2.5 font-semibold">Type</th>
+                  <th className="text-center px-3 py-2.5 font-semibold">Active</th>
+                  <th className="text-center px-3 py-2.5 font-semibold">Total Reported</th>
+                  <th className="text-center px-3 py-2.5 font-semibold">Critical</th>
+                  <th className="text-center px-3 py-2.5 font-semibold">Units Out</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {emergencyCategories.map(cat => (
+                  <tr key={cat.id} className="bg-white hover:bg-slate-50 transition-colors">
+                    <td className="px-4 py-2.5 text-slate-800 font-medium">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: cat.accentColor }} />
+                        {cat.name}
+                      </div>
+                    </td>
+                    <td className="text-center px-3 py-2.5">
+                      <span className={`font-bold ${cat.data.active > 0 ? cat.textColor : 'text-slate-400'}`}>
+                        {cat.data.active}
+                      </span>
+                    </td>
+                    <td className="text-center px-3 py-2.5 text-slate-600">{cat.data.total}</td>
+                    <td className="text-center px-3 py-2.5">
+                      {cat.data.critical > 0
+                        ? <span className="px-2 py-0.5 bg-red-50 text-red-700 text-xs font-bold rounded border border-red-200">{cat.data.critical}</span>
+                        : <span className="text-slate-400 text-xs">None</span>
+                      }
+                    </td>
+                    <td className="text-center px-3 py-2.5 text-slate-600">{cat.data.unitsDeployed}</td>
+                  </tr>
+                ))}
+                <tr className="bg-slate-50 border-t border-slate-200 font-semibold text-sm">
+                  <td className="px-4 py-2.5 text-slate-700">Total</td>
+                  <td className="text-center px-3 py-2.5 text-slate-800">{systemStats.totalIncidents}</td>
+                  <td className="text-center px-3 py-2.5 text-slate-800">{emergencyCategories.reduce((s,c)=>s+c.data.total,0)}</td>
+                  <td className="text-center px-3 py-2.5 text-slate-800">{systemStats.totalCritical}</td>
+                  <td className="text-center px-3 py-2.5 text-slate-800">{systemStats.totalUnitsDeployed}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Infrastructure */}
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Infrastructure Status</p>
+            <div className="flex gap-3">
+              {[
+                { label: 'Edge Nodes', value: `${systemStats.edgeNodesOnline} / ${systemStats.totalEdgeNodes} Online`, status: systemStats.edgeNodesOnline === systemStats.totalEdgeNodes ? 'OK' : 'DEGRADED' },
+                { label: 'System Uptime', value: systemStats.systemUptime, status: 'OK' },
+                { label: 'Last Sync', value: currentTime.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}), status: 'OK' },
+              ].map(item => (
+                <div key={item.label} className="flex-1 flex items-center justify-between px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm">
+                  <span className="text-slate-600">{item.label}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-800">{item.value}</span>
+                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${item.status === 'OK' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                      {item.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Remarks */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Remarks / Notes</label>
+            <textarea
+              rows={3}
+              placeholder="Add any operational notes, situational observations, or follow-up actions..."
+              value={remarks}
+              onChange={e => setRemarks(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-t border-slate-200 bg-slate-50 rounded-b-xl">
+          <p className="text-xs text-slate-400">CURA · Emergency Command &amp; Response Authority</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDownload}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-medium hover:bg-slate-100 transition-colors"
+            >
+              <DocumentArrowDownIcon className="w-4 h-4" />
+              Export CSV
+            </button>
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors"
+            >
+              <PrinterIcon className="w-4 h-4" />
+              Print Report
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const Dashboard = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [scrollPosition, setScrollPosition] = useState(0);
+  const [showReport, setShowReport] = useState(false);
 
   const [emergencyData, setEmergencyData] = useState({
     fire:      { active: 0, total: 0, critical: 0, unitsDeployed: 0, avgResponseTime: '—' },
@@ -388,7 +604,10 @@ const Dashboard = () => {
                   <button className="w-full text-sm font-semibold py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors duration-200 text-left">
                     Emergency Broadcast
                   </button>
-                  <button className="w-full text-sm font-medium py-2.5 px-4 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors duration-200 text-left">
+                  <button
+                    onClick={() => setShowReport(true)}
+                    className="w-full text-sm font-medium py-2.5 px-4 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors duration-200 text-left"
+                  >
                     Generate Report
                   </button>
                   <Link
@@ -441,6 +660,14 @@ const Dashboard = () => {
 
         </div>
       </div>
+      <GenerateReportModal
+        open={showReport}
+        onClose={() => setShowReport(false)}
+        emergencyData={emergencyData}
+        systemStats={systemStats}
+        currentTime={currentTime}
+        emergencyCategories={emergencyCategories}
+      />
     </div>
   );
 };

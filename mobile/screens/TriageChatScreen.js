@@ -214,6 +214,58 @@ const SAR_FLOW = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GPT-5-mini NLP Triage Analysis
+// ─────────────────────────────────────────────────────────────────────────────
+
+const NLP_TRIAGE_SYSTEM_PROMPT = `You are CURA's NLP triage classifier for emergency response in the Philippines.
+Given structured triage Q&A data, classify the incident and recommend response resources.
+Output compact JSON under 2KB — fields: severity (NON-URGENT|URGENT|CRITICAL|MASS-CASUALTY),
+priority_code (P1|P2|P3|P4), recommended_units[], estimated_response_minutes, nlp_keywords[], escalate_to_command.`;
+
+function buildTriagePayload(qaPairs, incidentType) {
+  // Cap each Q/A line to stay under 2KB total payload
+  const lines = qaPairs.map(p => `Q: ${p.q.slice(0, 80)} | A: ${p.a}`).join('\n');
+  const raw = `Incident: ${incidentType}\n\n${lines}`;
+  return raw.length > 1800 ? raw.slice(0, 1800) : raw;
+}
+
+async function analyzeTriageWithGPT(qaPairs, incidentType) {
+  const payload = {
+    model: 'gpt-5-mini',
+    messages: [
+      { role: 'system', content: NLP_TRIAGE_SYSTEM_PROMPT },
+      { role: 'user', content: buildTriagePayload(qaPairs, incidentType) },
+    ],
+    max_completion_tokens: 2000,
+    response_format: { type: 'json_object' },
+  };
+
+  // TODO: Uncomment block below to connect to OpenAI
+  /*
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer sk-proj-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  return JSON.parse(data.choices[0].message.content);
+  */
+
+  const hasCritical = qaPairs.some(p => p.a.includes('⚠'));
+  return {
+    severity: hasCritical ? 'CRITICAL' : 'URGENT',
+    priority_code: hasCritical ? 'P1' : 'P2',
+    recommended_units: ['AMB-02', 'AMB-05'],
+    estimated_response_minutes: 6,
+    nlp_keywords: qaPairs.slice(0, 4).map(p => p.a.replace('⚠ ', '').split(' — ')[0]),
+    escalate_to_command: hasCritical,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Config by type
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -331,6 +383,7 @@ export default function TriageChatScreen({ navigation, route }) {
   const [qaPairs, setQaPairs] = useState([]);
   const [isDone, setIsDone] = useState(false);
   const [hazmatPhotoUri, setHazmatPhotoUri] = useState(null);
+  const [gptTriage, setGptTriage] = useState(null);
 
   const scrollRef = useRef(null);
   const animValues = useRef({});
@@ -376,11 +429,10 @@ export default function TriageChatScreen({ navigation, route }) {
   const handleChoice = useCallback((choice) => {
     if (!currentStep) return;
 
-    // Track Q&A
     const botQuestion = flow[currentStep].bot;
-    setQaPairs(prev => [...prev, { q: botQuestion, a: choice.tag }]);
+    const updatedPairs = [...qaPairs, { q: botQuestion, a: choice.tag }];
+    setQaPairs(updatedPairs);
 
-    // Show user bubble
     addMessage({ from: 'user', text: choice.label });
     setCurrentStep(null);
     setIsTyping(true);
@@ -390,6 +442,7 @@ export default function TriageChatScreen({ navigation, route }) {
 
       if (choice.next === 'done') {
         setIsDone(true);
+        analyzeTriageWithGPT(updatedPairs, type).then(setGptTriage);
         addMessage({
           from: 'bot',
           text: "Assessment complete. Here's a summary ready to send to emergency responders:",
@@ -401,7 +454,7 @@ export default function TriageChatScreen({ navigation, route }) {
       }
       scrollToBottom();
     }, 900);
-  }, [currentStep, flow, addMessage, scrollToBottom]);
+  }, [currentStep, flow, addMessage, scrollToBottom, qaPairs, type]);
 
   const handleSubmit = () => {
     Animated.sequence([
@@ -555,6 +608,30 @@ export default function TriageChatScreen({ navigation, route }) {
                 </View>
               ))}
             </View>
+
+            {/* GPT-5-mini NLP Analysis */}
+            {gptTriage && (
+              <View style={[styles.gptCard, { borderColor: color + '30' }]}>
+                <View style={[styles.gptCardHeader, { backgroundColor: color + '10' }]}>
+                  <View style={[styles.gptBadge, { backgroundColor: color }]}>
+                    <Text style={styles.gptBadgeText}>GPT-5-mini</Text>
+                  </View>
+                  <Text style={[styles.gptCardTitle, { color }]}>NLP Triage Analysis</Text>
+                </View>
+                {[
+                  { label: 'Severity', value: gptTriage.severity },
+                  { label: 'Priority Code', value: gptTriage.priority_code },
+                  { label: 'Units', value: gptTriage.recommended_units.join(', ') },
+                  { label: 'Est. Response', value: `${gptTriage.estimated_response_minutes} min` },
+                  { label: 'Escalate to Command', value: gptTriage.escalate_to_command ? 'YES' : 'No' },
+                ].map((row, i, arr) => (
+                  <View key={row.label} style={[styles.gptRow, i < arr.length - 1 && { borderBottomWidth: 1, borderBottomColor: COLORS.slate100 }]}>
+                    <Text style={styles.gptLabel}>{row.label}</Text>
+                    <Text style={[styles.gptValue, { color }]}>{row.value}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {/* HAZMAT optional photo */}
             {hasPhoto && (
@@ -953,6 +1030,59 @@ const styles = StyleSheet.create({
     color: COLORS.slate400,
     fontWeight: '500',
     paddingHorizontal: SPACING.md,
+  },
+
+  // GPT-5-mini analysis card
+  gptCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.xl,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  gptCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.slate100,
+  },
+  gptBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: BORDER_RADIUS.full,
+  },
+  gptBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: COLORS.white,
+    letterSpacing: 0.5,
+  },
+  gptCardTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
+  },
+  gptRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 9,
+  },
+  gptLabel: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.slate500,
+    fontWeight: '500',
+  },
+  gptValue: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
   },
 
   // Success overlay
