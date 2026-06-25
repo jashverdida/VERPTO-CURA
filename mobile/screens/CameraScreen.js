@@ -25,7 +25,7 @@ const STATE_PROCESSING = 'processing';
 const STATE_RESULTS = 'results';
 
 // ── AI Backend config ──
-const AI_BACKEND_URL       = 'http://192.168.1.2:8000/detect';
+const AI_BACKEND_URL       = 'http://192.168.1.6:8000/detect';
 const CONFIDENCE_THRESHOLD = 10;
 const ALLOWED_CLASSES = {
   fire:    ['FIRE', 'SMOKE'],
