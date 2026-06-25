@@ -152,6 +152,48 @@ const AI_DISPATCH_TO_STATION_6 = {
   read: true,
 };
 
+// ─── GPT-5-mini Integration ──────────────────────────────────────────────────
+
+const GPT_MODEL = 'gpt-5-mini';
+
+const ESCALATION_SYSTEM_PROMPT = `You are CURA's emergency escalation AI for multi-agency incident coordination in the Philippines.
+Analyze inter-agency chat logs to detect escalation risk. Output compact JSON under 2KB.
+Fields: risk_level (LOW|MEDIUM|HIGH|CRITICAL), probability (0-1), triggers[], recommended_actions[] (max 3), auto_dispatch (bool), affected_agencies[].
+Classify CRITICAL if: fire breach + structure at risk + residential proximity. HIGH if: multiple injuries or spreading hazmat.`;
+
+function compressPayload(messages) {
+  const recent = messages.slice(-8);
+  return recent
+    .map(m => `[${m.time}] ${m.name}: ${m.text.slice(0, 120)}`)
+    .join('\n');
+}
+
+async function analyzeEscalationWithGPT(messages) {
+  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const compressed = compressPayload(messages);
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: GPT_MODEL,
+      messages: [
+        { role: 'system', content: ESCALATION_SYSTEM_PROMPT },
+        { role: 'user', content: `Analyze this incident comms log:\n\n${compressed}` },
+      ],
+      max_completion_tokens: 2000,
+      response_format: { type: 'json_object' },
+    }),
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return JSON.parse(data.choices[0].message.content);
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CuraChat() {
@@ -161,7 +203,11 @@ export default function CuraChat() {
   const [escalationActive, setEscalationActive] = useState(false);
   const [bannerVisible, setBannerVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [chatFilter, setChatFilter] = useState('all');
+  const [gptAnalysis, setGptAnalysis] = useState(null);
+  const [isAIScanning, setIsAIScanning] = useState(false);
   const timeoutsRef = useRef([]);
+  const aiTimerRef = useRef(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -175,6 +221,11 @@ export default function CuraChat() {
 
     if (escalationActive) {
       setBannerVisible(true);
+      if (!gptAnalysis) {
+        analyzeEscalationWithGPT(INITIAL_MESSAGES[2])
+          .then(r => { if (r) setGptAnalysis(r); })
+          .catch(console.error);
+      }
       const t1 = setTimeout(() => {
         setMessages(prev => ({
           ...prev,
@@ -199,8 +250,29 @@ export default function CuraChat() {
     } else {
       setBannerVisible(false);
       setMessages(INITIAL_MESSAGES);
+      setGptAnalysis(null);
     }
   }, [escalationActive]);
+
+  const scheduleAICheck = (stationId, threadMessages) => {
+    if (escalationActive || threadMessages.length < 3) return;
+    clearTimeout(aiTimerRef.current);
+    setIsAIScanning(true);
+    aiTimerRef.current = setTimeout(async () => {
+      try {
+        const result = await analyzeEscalationWithGPT(threadMessages);
+        if (!result) return;
+        setGptAnalysis(result);
+        if ((result.risk_level === 'HIGH' || result.risk_level === 'CRITICAL') && result.auto_dispatch) {
+          setEscalationActive(true);
+        }
+      } catch (err) {
+        console.error('CURA AI scan failed:', err.message);
+      } finally {
+        setIsAIScanning(false);
+      }
+    }, 1000);
+  };
 
   const sendMessage = () => {
     if (!inputText.trim()) return;
@@ -212,10 +284,14 @@ export default function CuraChat() {
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       read: true,
     };
-    setMessages(prev => ({
-      ...prev,
-      [selectedStation.id]: [...(prev[selectedStation.id] || []), newMsg],
-    }));
+    setMessages(prev => {
+      const updated = {
+        ...prev,
+        [selectedStation.id]: [...(prev[selectedStation.id] || []), newMsg],
+      };
+      scheduleAICheck(selectedStation.id, updated[selectedStation.id]);
+      return updated;
+    });
     setInputText('');
   };
 
@@ -226,13 +302,18 @@ export default function CuraChat() {
     }
   };
 
-  const filteredStations = STATIONS.filter(s =>
-    s.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const unreadCount = (stationId) => (messages[stationId] || []).filter(m => !m.read && m.sender === 'station').length;
+
+  const filteredStations = STATIONS.filter(s => {
+    const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesFilter = chatFilter === 'all' || unreadCount(s.id) > 0;
+    return matchesSearch && matchesFilter;
+  });
+
+  const totalUnreadStations = STATIONS.filter(s => unreadCount(s.id) > 0).length;
 
   const onlineCount = STATIONS.filter(s => s.status === 'online').length;
   const currentMessages = messages[selectedStation.id] || [];
-  const unreadCount = (stationId) => (messages[stationId] || []).filter(m => !m.read && m.sender === 'station').length;
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-slate-950">
@@ -253,7 +334,7 @@ export default function CuraChat() {
                   LIVE
                 </span>
                 <span className="px-2 py-0.5 bg-red-900 text-red-300 text-xs font-bold rounded-full border border-red-700">
-                  GPT-4o-mini
+                  GPT-5-mini
                 </span>
               </div>
               <p className="text-white font-semibold text-sm leading-relaxed">
@@ -277,6 +358,22 @@ export default function CuraChat() {
                   </span>
                 ))}
               </div>
+              {gptAnalysis && (
+                <div className="mt-3 pt-3 border-t border-red-800/30 flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-black text-red-500/70 uppercase tracking-widest">GPT-5-mini:</span>
+                  <span className="px-2 py-0.5 bg-red-900/50 text-red-200 text-xs font-black rounded border border-red-700/40">
+                    {gptAnalysis.risk_level} · {Math.round(gptAnalysis.probability * 100)}%
+                  </span>
+                  {gptAnalysis.triggers.slice(0, 2).map(t => (
+                    <span key={t} className="px-2 py-0.5 bg-slate-900/60 text-red-300/80 text-xs rounded border border-red-900/50">
+                      {t}
+                    </span>
+                  ))}
+                  <span className="px-2 py-0.5 bg-emerald-900/30 text-emerald-400 text-xs rounded border border-emerald-800/40">
+                    auto_dispatch: {String(gptAnalysis.auto_dispatch)}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
           <button
@@ -319,6 +416,35 @@ export default function CuraChat() {
             </div>
           </div>
 
+          {/* All / Unread filter tabs */}
+          <div className="flex border-b border-slate-800 flex-shrink-0">
+            {[
+              { key: 'all', label: 'All' },
+              { key: 'unread', label: 'Unread', count: totalUnreadStations },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setChatFilter(tab.key)}
+                className={`flex-1 py-2.5 text-xs font-semibold tracking-wide transition-all duration-200 flex items-center justify-center gap-1.5 ${
+                  chatFilter === tab.key
+                    ? 'text-white border-b-2 border-emerald-500'
+                    : 'text-slate-500 hover:text-slate-300 border-b-2 border-transparent'
+                }`}
+              >
+                {tab.label}
+                {tab.count > 0 && (
+                  <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full leading-none ${
+                    chatFilter === tab.key
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-slate-700 text-slate-300'
+                  }`}>
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
           {/* Station entries */}
           <div className="flex-1 overflow-y-auto">
             {filteredStations.map((station) => {
@@ -329,7 +455,10 @@ export default function CuraChat() {
               return (
                 <button
                   key={station.id}
-                  onClick={() => setSelectedStation(station)}
+                  onClick={() => {
+                    setSelectedStation(station);
+                    scheduleAICheck(station.id, messages[station.id] || []);
+                  }}
                   className={`w-full px-4 py-3.5 flex items-start space-x-3 text-left transition-all duration-200 border-b border-slate-800/60 border-l-2 ${
                     isSelected
                       ? isEscTarget
@@ -467,6 +596,12 @@ export default function CuraChat() {
                 <div className="flex items-center space-x-1.5 px-3 py-1.5 bg-red-500/15 border border-red-500/30 rounded-lg">
                   <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
                   <span className="text-xs font-black text-red-400 tracking-widest">CODE RED</span>
+                </div>
+              )}
+              {isAIScanning && (
+                <div className="flex items-center space-x-1.5 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                  <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
+                  <span className="text-xs font-semibold text-yellow-400">AI Scanning...</span>
                 </div>
               )}
               <div className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border ${

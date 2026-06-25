@@ -6,7 +6,6 @@ import {
   Bars3Icon,
   ChevronLeftIcon,
   ShieldCheckIcon,
-  PhoneIcon,
   FireIcon,
   HeartIcon,
   TruckIcon,
@@ -17,6 +16,7 @@ import {
   BuildingOfficeIcon,
   ChatBubbleLeftRightIcon,
   ArchiveBoxIcon,
+  BeakerIcon,
 } from '@heroicons/react/24/outline';
 
 // ==========================================
@@ -24,15 +24,15 @@ import {
 // No dynamic class construction - safe from Tailwind purging
 // ==========================================
 const CATEGORY_COLOR_MAP = {
-  fire:       { bg: 'bg-red-600',      shadow: 'shadow-red-900/30',      badgeBg: 'bg-white',      badgeText: 'text-red-600',      gradientBg: 'bg-gradient-to-b from-red-950 via-red-900 to-slate-950' },
-  medical:    { bg: 'bg-blue-600',     shadow: 'shadow-blue-900/30',     badgeBg: 'bg-white',      badgeText: 'text-blue-600',     gradientBg: 'bg-gradient-to-b from-blue-950 via-blue-900 to-slate-950' },
-  accidents:  { bg: 'bg-amber-500',    shadow: 'shadow-amber-900/30',    badgeBg: 'bg-white',      badgeText: 'text-amber-500',    gradientBg: 'bg-gradient-to-b from-amber-950 via-amber-900 to-slate-950' },
-  rescue:     { bg: 'bg-purple-600',   shadow: 'shadow-purple-900/30',   badgeBg: 'bg-white',      badgeText: 'text-purple-600',   gradientBg: 'bg-gradient-to-b from-purple-950 via-purple-900 to-slate-950' },
-  dashboard:  { bg: 'bg-emerald-600',  shadow: 'shadow-emerald-900/30',  badgeBg: 'bg-white',      badgeText: 'text-emerald-600',  gradientBg: 'bg-gradient-to-b from-emerald-950 via-emerald-900 to-slate-950' },
-  system:     { bg: 'bg-emerald-600',  shadow: 'shadow-emerald-900/30',  badgeBg: 'bg-white',      badgeText: 'text-emerald-600',  gradientBg: 'bg-gradient-to-b from-emerald-950 via-emerald-900 to-slate-950' },
-  stations:   { bg: 'bg-emerald-600',  shadow: 'shadow-emerald-900/30',  badgeBg: 'bg-white',      badgeText: 'text-emerald-600',  gradientBg: 'bg-gradient-to-b from-emerald-950 via-emerald-900 to-slate-950' },
-  archives:   { bg: 'bg-cyan-600',     shadow: 'shadow-cyan-900/30',     badgeBg: 'bg-white',      badgeText: 'text-cyan-600',     gradientBg: 'bg-gradient-to-b from-cyan-950 via-cyan-900 to-slate-950' },
-  default:    { bg: 'bg-emerald-600',  shadow: 'shadow-emerald-900/30',  badgeBg: 'bg-white',      badgeText: 'text-emerald-600',  gradientBg: 'bg-gradient-to-b from-slate-900 to-slate-950' }
+  fire:       { bg: 'bg-red-600',      shadow: 'shadow-red-900/30',      badgeBg: 'bg-white',      badgeText: 'text-red-600',      gradientBg: 'bg-gradient-to-b from-red-950 via-red-900 to-slate-950',      hover: 'hover:bg-red-700/50' },
+  medical:    { bg: 'bg-blue-600',     shadow: 'shadow-blue-900/30',     badgeBg: 'bg-white',      badgeText: 'text-blue-600',     gradientBg: 'bg-gradient-to-b from-blue-950 via-blue-900 to-slate-950',     hover: 'hover:bg-blue-700/50' },
+  accidents:  { bg: 'bg-amber-500',    shadow: 'shadow-amber-900/30',    badgeBg: 'bg-white',      badgeText: 'text-amber-500',    gradientBg: 'bg-gradient-to-b from-amber-950 via-amber-900 to-slate-950',    hover: 'hover:bg-amber-700/50' },
+  rescue:     { bg: 'bg-purple-600',   shadow: 'shadow-purple-900/30',   badgeBg: 'bg-white',      badgeText: 'text-purple-600',   gradientBg: 'bg-gradient-to-b from-purple-950 via-purple-900 to-slate-950',   hover: 'hover:bg-purple-700/50' },
+  dashboard:  { bg: 'bg-emerald-600',  shadow: 'shadow-emerald-900/30',  badgeBg: 'bg-white',      badgeText: 'text-emerald-600',  gradientBg: 'bg-gradient-to-b from-emerald-950 via-emerald-900 to-slate-950',  hover: 'hover:bg-emerald-700/50' },
+  system:     { bg: 'bg-emerald-600',  shadow: 'shadow-emerald-900/30',  badgeBg: 'bg-white',      badgeText: 'text-emerald-600',  gradientBg: 'bg-gradient-to-b from-emerald-950 via-emerald-900 to-slate-950',  hover: 'hover:bg-emerald-700/50' },
+  stations:   { bg: 'bg-emerald-600',  shadow: 'shadow-emerald-900/30',  badgeBg: 'bg-white',      badgeText: 'text-emerald-600',  gradientBg: 'bg-gradient-to-b from-emerald-950 via-emerald-900 to-slate-950',  hover: 'hover:bg-emerald-700/50' },
+  archives:   { bg: 'bg-cyan-600',     shadow: 'shadow-cyan-900/30',     badgeBg: 'bg-white',      badgeText: 'text-cyan-600',     gradientBg: 'bg-gradient-to-b from-cyan-950 via-cyan-900 to-slate-950',     hover: 'hover:bg-cyan-700/50' },
+  default:    { bg: 'bg-emerald-600',  shadow: 'shadow-emerald-900/30',  badgeBg: 'bg-white',      badgeText: 'text-emerald-600',  gradientBg: 'bg-gradient-to-b from-slate-900 to-slate-950',                   hover: 'hover:bg-emerald-700/50' }
 };
 
 // Route-to-category mapping
@@ -165,6 +165,15 @@ const Sidebar = ({ collapsed, onToggle }) => {
       path: '/archives',
       description: 'Historical incidents',
       category: 'archives'
+    },
+    {
+      id: 'ai-test',
+      name: 'AI Test Lab',
+      icon: BeakerIcon,
+      path: '/ai-test',
+      description: 'Test escalation AI',
+      category: 'default',
+      devLabel: 'DEV',
     }
   ];
 
@@ -193,34 +202,42 @@ const Sidebar = ({ collapsed, onToggle }) => {
         <div className="relative z-10 flex flex-col h-full w-full">
 
         {/* Logo Section */}
-        <div className={`p-4 border-b ${sidebarColors.border}`}>
-          <div className="flex items-center justify-between">
-            {!collapsed && (
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 flex items-center justify-center">
+        <div className={`px-4 py-3 border-b ${sidebarColors.border}`}>
+          <div className="flex items-center justify-between gap-2">
+            {!collapsed ? (
+              <>
+                <div className="flex items-center space-x-3 min-w-0">
+                  <div className="w-9 h-9 flex-shrink-0 flex items-center justify-center">
+                    <img src="/cura-logo.png" alt="CURA Logo" className="w-full h-full object-contain" />
+                  </div>
+                  <div className="min-w-0">
+                    <h1 className="text-lg font-bold text-white tracking-tight leading-none">CURA</h1>
+                    <p className="text-xs text-slate-400 mt-0.5">Command Center</p>
+                  </div>
+                </div>
+                <button
+                  onClick={onToggle}
+                  className="flex-shrink-0 w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/70 transition-all duration-200 flex items-center justify-center border border-slate-700/50"
+                  title="Collapse sidebar"
+                >
+                  <ChevronLeftIcon className="w-4 h-4" />
+                </button>
+              </>
+            ) : (
+              <div className="flex flex-col items-center w-full gap-2.5">
+                <div className="w-9 h-9 flex items-center justify-center">
                   <img src="/cura-logo.png" alt="CURA Logo" className="w-full h-full object-contain" />
                 </div>
-                <div>
-                  <h1 className="text-lg font-bold text-white tracking-tight">CURA</h1>
-                  <p className="text-xs text-slate-400">Command Center</p>
-                </div>
-              </div>
-            )}
-
-            {collapsed && (
-              <div className="w-10 h-10 flex items-center justify-center mx-auto">
-                <img src="/cura-logo.png" alt="CURA Logo" className="w-full h-full object-contain" />
+                <button
+                  onClick={onToggle}
+                  className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/70 transition-all duration-200 flex items-center justify-center border border-slate-700/50"
+                  title="Expand sidebar"
+                >
+                  <Bars3Icon className="w-4 h-4" />
+                </button>
               </div>
             )}
           </div>
-
-          {/* Toggle Button */}
-          <button
-            onClick={onToggle}
-            className={`mt-3 w-full p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all duration-200 flex items-center justify-center`}
-          >
-            {collapsed ? <Bars3Icon className="w-5 h-5" /> : <ChevronLeftIcon className="w-5 h-5" />}
-          </button>
         </div>
 
         {/* Navigation Menu */}
@@ -237,7 +254,7 @@ const Sidebar = ({ collapsed, onToggle }) => {
                 className={`relative w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ease-in-out group ${
                   active
                     ? `text-white ${itemTheme.bg} shadow-lg ${itemTheme.shadow}`
-                    : `${sidebarColors.text} ${sidebarColors.hover} hover:text-white`
+                    : `${sidebarColors.text} ${activeTheme.hover} hover:text-white`
                 }`}
               >
                 <IconComponent className={`w-5 h-5 ${collapsed ? 'mx-auto' : 'mr-3'} flex-shrink-0`} />
@@ -252,6 +269,11 @@ const Sidebar = ({ collapsed, onToggle }) => {
                           : 'bg-slate-600 text-white'
                       }`}>
                         {item.badge}
+                      </span>
+                    )}
+                    {item.devLabel && (
+                      <span className="ml-2 px-1.5 py-0.5 rounded-full text-xs font-black bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 tracking-wide">
+                        {item.devLabel}
                       </span>
                     )}
                   </>
@@ -360,23 +382,6 @@ const Sidebar = ({ collapsed, onToggle }) => {
             </div>
           )}
 
-          {/* Emergency Hotline */}
-          {!collapsed ? (
-            <div className="bg-red-950/50 border border-red-900/50 rounded-lg p-3">
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center space-x-2">
-                  <PhoneIcon className="w-4 h-4 text-red-400" />
-                  <span className="text-xs font-medium text-red-300">Emergency</span>
-                </div>
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-              </div>
-              <div className="text-xl font-bold text-white font-mono">911</div>
-            </div>
-          ) : (
-            <div className="bg-red-950/50 border border-red-900/50 rounded-lg p-2 flex items-center justify-center">
-              <PhoneIcon className="w-5 h-5 text-red-400" />
-            </div>
-          )}
         </div>
       </div>
       </div>

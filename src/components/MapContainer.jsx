@@ -1,2 +1,5 @@
-// Delegate to Google Maps implementation — all pages that import MapContainer get Google Maps automatically.
-export { default } from './GoogleMapContainer';
+// Delegate to Google Maps implementation — passes all props through.
+import GoogleMapContainer from './GoogleMapContainer';
+export default function MapContainer(props) {
+  return <GoogleMapContainer {...props} />;
+}

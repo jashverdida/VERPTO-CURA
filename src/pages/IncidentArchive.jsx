@@ -200,35 +200,6 @@ const IncidentArchive = () => {
               <h1 className="text-2xl font-bold text-white">Incident Archive & History</h1>
             </div>
           </div>
-
-          {/* Right: Status + DateTime + Stats */}
-          <div className="flex items-center space-x-4">
-
-            {/* System Online */}
-            <div className="flex items-center space-x-2 bg-white/10 backdrop-blur border border-white/20 px-4 py-2 rounded-lg">
-              <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
-              <span className="text-sm font-medium text-white">Archive Active</span>
-              <span className="text-xs text-emerald-200">{filteredIncidents.length} records</span>
-            </div>
-
-            {/* DateTime */}
-            <div className="text-right bg-white/10 backdrop-blur border border-white/20 px-4 py-2 rounded-lg">
-              <div className="text-sm font-semibold text-white">{currentTime.toLocaleDateString()}</div>
-              <div className="text-xs text-emerald-200">{currentTime.toLocaleTimeString()}</div>
-            </div>
-
-            {/* Quick Stats */}
-            <div className="flex items-center space-x-3 bg-white/10 backdrop-blur border border-white/20 px-4 py-2 rounded-lg">
-              <div className="text-center border-r border-white/20 pr-3">
-                <div className="text-xl font-bold text-white">{incidents.length}</div>
-                <div className="text-xs text-emerald-200">Total Resolved</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl font-bold text-emerald-300">{filteredIncidents.length}</div>
-                <div className="text-xs text-emerald-200">Filtered</div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 

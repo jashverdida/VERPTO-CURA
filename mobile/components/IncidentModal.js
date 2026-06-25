@@ -14,6 +14,30 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SHADOWS, BORDER_RADIUS, SPACING } from '../constants/theme';
 
+// Local placeholder images — always shown for camera-report incident types
+const FIRE_IMG    = require('../assets/fire-incident.png');
+const VEHICLE_IMG = require('../assets/vehicular-accident.png');
+
+// Curated triage Q&A per incident type for demo display
+const DUMMY_TRIAGE = {
+  Medical: [
+    { q: 'What best describes the situation?',  a: 'Chest Pain / Heart Attack' },
+    { q: 'Is the patient currently conscious?', a: 'Conscious — fully awake' },
+    { q: 'Approximate age of the patient?',     a: 'Adult (18–60 years)' },
+    { q: 'How many patients are involved?',     a: '1 patient' },
+  ],
+  HAZMAT: [
+    { q: 'What type of hazardous material incident?', a: 'Gas Leak (LPG / Industrial)' },
+    { q: 'What is the scale of the spill?',           a: 'Medium — street / compound level' },
+    { q: 'Is there a fire or explosion risk?',        a: 'Yes — evacuate immediately' },
+  ],
+  'Search & Rescue': [
+    { q: 'What type of rescue situation?',  a: 'Person trapped / structural collapse' },
+    { q: 'How many people are involved?',   a: '1–3 people' },
+    { q: 'Is the area safe to approach?',   a: 'Limited access — debris blocking' },
+  ],
+};
+
 const { height } = Dimensions.get('window');
 
 const getStatusColor = (status) => {
@@ -89,7 +113,11 @@ export default function IncidentModal({ visible, incident, onClose }) {
 
   if (!incident) return null;
 
-  const typeColor = getTypeColor(incident.title);
+  const typeColor     = getTypeColor(incident.title);
+  const isFireType    = incident.title.includes('Fire');
+  const isVehicleType = incident.title.includes('Vehicle');
+  const isCameraType  = isFireType || isVehicleType;
+  const triagePairs   = !isCameraType ? (DUMMY_TRIAGE[incident.type] ?? []) : [];
 
   return (
     <Modal
@@ -155,30 +183,42 @@ export default function IncidentModal({ visible, incident, onClose }) {
             showsVerticalScrollIndicator={false}
             bounces={false}
           >
-            {/* Image / Placeholder */}
-            <View style={styles.imageContainer}>
-              {incident.imageUrl ? (
+            {/* Image — local asset for FIRE / VEHICLE */}
+            {isCameraType && (
+              <View style={styles.imageContainer}>
                 <Image
-                  source={{ uri: incident.imageUrl }}
+                  source={isFireType ? FIRE_IMG : VEHICLE_IMG}
                   style={styles.image}
                   resizeMode="cover"
                 />
-              ) : (
-                <View style={[styles.image, styles.imagePlaceholder]}>
-                  <Ionicons
-                    name={getTypeIcon(incident.title)}
-                    size={48}
-                    color={typeColor}
-                  />
-                  <Text style={styles.placeholderText}>Incident Scene</Text>
-                </View>
-              )}
-              <View style={styles.imageOverlay}>
-                <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(incident.severity) }]}>
-                  <Text style={styles.severityText}>{incident.severity} Priority</Text>
+                <View style={styles.imageOverlay}>
+                  <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(incident.severity) }]}>
+                    <Text style={styles.severityText}>{incident.severity} Priority</Text>
+                  </View>
                 </View>
               </View>
-            </View>
+            )}
+
+            {/* Triage assessment — MEDICAL / HAZMAT / SEARCH_RESCUE */}
+            {!isCameraType && triagePairs.length > 0 && (
+              <View style={styles.triageCard}>
+                <View style={styles.triageHeader}>
+                  <View style={[styles.triageHeaderIcon, { backgroundColor: typeColor }]}>
+                    <Ionicons name={getTypeIcon(incident.title)} size={13} color="#fff" />
+                  </View>
+                  <Text style={[styles.triageTitle, { color: typeColor }]}>Triage Assessment</Text>
+                  <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(incident.severity), marginLeft: 'auto' }]}>
+                    <Text style={styles.severityText}>{incident.severity} Priority</Text>
+                  </View>
+                </View>
+                {triagePairs.map((pair, i) => (
+                  <View key={i} style={[styles.qaPair, i > 0 && styles.qaPairBorder]}>
+                    <Text style={styles.qaQ}>{pair.q}</Text>
+                    <Text style={[styles.qaA, { color: typeColor }]}>{pair.a}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {/* Details */}
             <View style={styles.details}>
@@ -201,6 +241,17 @@ export default function IncidentModal({ visible, incident, onClose }) {
                 <View style={styles.detailContent}>
                   <Text style={styles.detailLabel}>Reported</Text>
                   <Text style={styles.detailValue}>{incident.reportedAt}</Text>
+                </View>
+              </View>
+
+              {/* Reporter */}
+              <View style={styles.detailRow}>
+                <View style={styles.detailIcon}>
+                  <Ionicons name="person-circle" size={18} color={COLORS.emerald} />
+                </View>
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailLabel}>Reported By</Text>
+                  <Text style={styles.detailValue}>{incident.reporterName || 'Eijay P. Pepito'}</Text>
                 </View>
               </View>
 
@@ -418,6 +469,52 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
     marginBottom: SPACING.xs,
+  },
+
+  // Triage assessment card
+  triageCard: {
+    marginTop: SPACING.md,
+    borderRadius: BORDER_RADIUS.lg,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.slate200,
+    backgroundColor: COLORS.white,
+    ...SHADOWS.small,
+  },
+  triageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 12,
+    backgroundColor: COLORS.slate50,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.slate100,
+  },
+  triageHeaderIcon: {
+    width: 24, height: 24, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  triageTitle: {
+    fontSize: 13, fontWeight: '800', letterSpacing: 0.2,
+  },
+  qaPair: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 10,
+  },
+  qaPairBorder: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.slate100,
+  },
+  qaQ: {
+    fontSize: 10, fontWeight: '700',
+    color: COLORS.slate400,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 3,
+  },
+  qaA: {
+    fontSize: 13, fontWeight: '700',
   },
   actions: {
     flexDirection: 'row',

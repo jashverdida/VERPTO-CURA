@@ -56,7 +56,7 @@ If not auto-detected:
 1. Under **"Environment Variables"** section, add:
 
    **Name:** `VITE_GOOGLE_MAPS_API_KEY`  
-   **Value:** `AIzaSyApIoATDwd3dcVx8ZtNSBbzVeh5rBo51cU`  
+   **Value:** `AIzaSyASeu4ipHv3PWUkSsKxdUk725fbSc5pkLk`  
    **Select all environments** (Production, Preview, Development)
 
 2. Click **"Add"**

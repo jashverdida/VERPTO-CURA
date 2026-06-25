@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, MapPin, Lock, Users, Radio, Shield, Mail, Linkedin, ChevronRight, Activity, Globe, Zap, ArrowRight, Menu, X } from 'lucide-react';
+import { AlertCircle, MapPin, Lock, Users, Radio, Shield, Mail, Linkedin, ChevronLeft, ChevronRight, Activity, Globe, Zap, ArrowRight, Menu, X } from 'lucide-react';
+import landingVideo from '../video-assets/landing-page.mp4';
 import JashPhoto from '../devs/Jash.png';
 import EijayPhoto from '../devs/eijay (1).png';
 import YadoPhoto from '../devs/yado_nobg.png';
@@ -9,6 +10,12 @@ export default function Landing() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('home');
+  const heroVideoA = useRef(null);
+  const heroVideoB = useRef(null);
+  const [heroActive, setHeroActive] = useState('a');
+  const [carouselIdx, setCarouselIdx] = useState(0);
+  const [slideVisible, setSlideVisible] = useState(true);
+  const carouselTouchStart = useRef(null);
 
   // Handle scroll effect for navbar and active section
   useEffect(() => {
@@ -46,6 +53,50 @@ export default function Landing() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    const a = heroVideoA.current;
+    const b = heroVideoB.current;
+    if (!a || !b) return;
+
+    a.play().catch(() => {});
+
+    let switching = false;
+
+    const makeHandler = (current, next, activateLabel) => () => {
+      if (!switching && !isNaN(current.duration) && current.duration - current.currentTime < 1) {
+        switching = true;
+        next.currentTime = 0;
+        next.play().catch(() => {});
+        setHeroActive(activateLabel);
+        setTimeout(() => { switching = false; }, 1500);
+      }
+    };
+
+    const handlerA = makeHandler(a, b, 'b');
+    const handlerB = makeHandler(b, a, 'a');
+
+    a.addEventListener('timeupdate', handlerA);
+    b.addEventListener('timeupdate', handlerB);
+
+    return () => {
+      a.removeEventListener('timeupdate', handlerA);
+      b.removeEventListener('timeupdate', handlerB);
+      a.pause();
+      b.pause();
+    };
+  }, []);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setSlideVisible(false);
+      setTimeout(() => {
+        setCarouselIdx((prev) => (prev + 1) % 6);
+        setSlideVisible(true);
+      }, 250);
+    }, 5000);
+    return () => clearInterval(t);
+  }, []);
+
   const team = [
     { name: 'Eijay Pepito', role: 'Backend Engineer & Systems Architect', photo: EijayPhoto, email: 'eijay.pepito8@gmail.com', linkedin: 'https://www.linkedin.com/in/eijay-pepito-98b538355/' },
     { name: 'Jashmine Verdida', role: 'Chief QA & Frontend Engineer', photo: JashPhoto, email: 'jashmineverdida08@gmail.com', linkedin: 'https://www.linkedin.com/in/jashmine-verdida-820a56352/' },
@@ -66,6 +117,70 @@ export default function Landing() {
     { number: '350+', label: 'Active Responders', prefix: '' },
     { number: '99.9', label: 'System Uptime', prefix: '%' },
   ];
+
+  const overviewSlides = [
+    {
+      icon: Zap,
+      tag: 'Overview',
+      title: 'Built for the Critical Path',
+      desc: 'A unified, encrypted platform built for high-stress emergency response. Replaces fragmented communication channels with a single source of truth.',
+      metric: { label: 'Response Time Improvement', value: '+40%', width: '85%' },
+    },
+    {
+      icon: AlertCircle,
+      tag: 'Alerts',
+      title: 'Real-Time Alert System',
+      desc: 'Incident notifications dispatched to all active responders within milliseconds of detection. Zero lag between report and response.',
+      metric: { label: 'Alert Dispatch Speed', value: '<100ms', width: '95%' },
+    },
+    {
+      icon: MapPin,
+      tag: 'Mapping',
+      title: 'Live Incident Mapping',
+      desc: 'High-precision geospatial visualization of all active incidents, responder positions, and coverage zones across the operational area.',
+      metric: { label: 'Positioning Accuracy', value: '99.8%', width: '99%' },
+    },
+    {
+      icon: Lock,
+      tag: 'Security',
+      title: 'Secure Data Infrastructure',
+      desc: 'Enterprise-grade end-to-end encryption for every message, alert, and packet. No sensitive intel ever transmitted in plaintext.',
+      metric: { label: 'Encryption Coverage', value: '100%', width: '100%' },
+    },
+    {
+      icon: Radio,
+      tag: 'Comms',
+      title: 'Unified Communications',
+      desc: 'A single integrated platform for cross-agency messaging, coordination, and status updates. Eliminate radio fragmentation across agencies.',
+      metric: { label: 'Inter-Agency Sync Rate', value: '+60%', width: '75%' },
+    },
+    {
+      icon: Shield,
+      tag: 'Triage',
+      title: 'Smart Priority Triage',
+      desc: 'Intelligent resource allocation powered by severity scoring. The right units are dispatched to the right locations every time.',
+      metric: { label: 'Dispatch Accuracy', value: '97%', width: '97%' },
+    },
+  ];
+
+  const changeSlide = (newIdx) => {
+    setSlideVisible(false);
+    setTimeout(() => {
+      setCarouselIdx(newIdx);
+      setSlideVisible(true);
+    }, 250);
+  };
+
+  const nextCarousel = () => changeSlide((carouselIdx + 1) % overviewSlides.length);
+  const prevCarousel = () => changeSlide((carouselIdx - 1 + overviewSlides.length) % overviewSlides.length);
+
+  const onCarouselTouchStart = (e) => { carouselTouchStart.current = e.touches[0].clientX; };
+  const onCarouselTouchEnd = (e) => {
+    if (carouselTouchStart.current === null) return;
+    const dx = carouselTouchStart.current - e.changedTouches[0].clientX;
+    if (Math.abs(dx) > 40) dx > 0 ? nextCarousel() : prevCarousel();
+    carouselTouchStart.current = null;
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-inter selection:bg-emerald-500/30 overflow-hidden">
@@ -172,14 +287,6 @@ export default function Landing() {
           
           {/* Hero Content */}
           <div className="text-left space-y-8 animate-fade-in">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-medium">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              System Live & Operational
-            </div>
-            
             <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-white leading-[1.1]">
               Rapid Response <br/>
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-200">Reimagined.</span>
@@ -203,51 +310,34 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Hero Visual - Dashboard Mockup */}
+          {/* Hero Visual - Video */}
           <div className="relative hidden lg:block animate-slide-up" style={{ animationDelay: '0.2s' }}>
             <div className="absolute inset-0 bg-gradient-to-tr from-emerald-500 to-blue-500 rounded-2xl blur-3xl opacity-20 pointer-events-none"></div>
-            <div className="relative rounded-2xl border border-white/10 bg-slate-900/50 backdrop-blur-xl shadow-2xl overflow-hidden transform rotate-y-[-10deg] rotate-x-[5deg] scale-105 transition-transform hover:scale-110 duration-700 pointer-events-none">
+            <div className="relative rounded-2xl border border-white/10 bg-slate-900/50 backdrop-blur-xl shadow-2xl overflow-hidden scale-105 transition-transform hover:scale-110 duration-700 pointer-events-none">
               {/* Mockup Header */}
               <div className="h-12 border-b border-white/10 flex items-center px-4 gap-2 bg-slate-800/50">
                 <div className="w-3 h-3 rounded-full bg-red-500/80"></div>
                 <div className="w-3 h-3 rounded-full bg-amber-500/80"></div>
                 <div className="w-3 h-3 rounded-full bg-emerald-500/80"></div>
               </div>
-              {/* Mockup Body */}
-              <div className="p-6 grid grid-cols-3 gap-4">
-                <div className="col-span-2 space-y-4">
-                  <div className="h-32 rounded-lg bg-slate-800/80 border border-white/5 flex items-center justify-center">
-                    <MapPin className="w-8 h-8 text-emerald-500/50" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="h-24 rounded-lg bg-emerald-900/30 border border-emerald-500/20 p-4">
-                      <div className="w-8 h-2 bg-emerald-400/50 rounded mb-4"></div>
-                      <div className="w-16 h-4 bg-white/20 rounded"></div>
-                    </div>
-                    <div className="h-24 rounded-lg bg-red-900/30 border border-red-500/20 p-4">
-                      <div className="w-8 h-2 bg-red-400/50 rounded mb-4"></div>
-                      <div className="w-16 h-4 bg-white/20 rounded"></div>
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <div className="h-16 rounded-lg bg-slate-800/80 border border-white/5"></div>
-                  <div className="h-16 rounded-lg bg-slate-800/80 border border-white/5"></div>
-                  <div className="h-20 rounded-lg bg-slate-800/80 border border-white/5"></div>
-                </div>
-              </div>
-              
-              {/* Floating UI Element */}
-              <div className="absolute -right-12 top-24 bg-slate-800/90 backdrop-blur-md border border-emerald-500/30 p-4 rounded-xl shadow-xl animate-blob" style={{ animationDelay: '1s' }}>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                    <Shield className="w-5 h-5 text-emerald-400" />
-                  </div>
-                  <div>
-                    <div className="text-xs text-slate-400">Status</div>
-                    <div className="text-sm font-bold text-white">All Systems Nominal</div>
-                  </div>
-                </div>
+              {/* Video Body - crossfade loop */}
+              <div className="relative aspect-video bg-slate-950">
+                <video
+                  ref={heroVideoA}
+                  src={landingVideo}
+                  muted
+                  playsInline
+                  preload="auto"
+                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${heroActive === 'a' ? 'opacity-100' : 'opacity-0'}`}
+                />
+                <video
+                  ref={heroVideoB}
+                  src={landingVideo}
+                  muted
+                  playsInline
+                  preload="auto"
+                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${heroActive === 'b' ? 'opacity-100' : 'opacity-0'}`}
+                />
               </div>
             </div>
           </div>
@@ -274,24 +364,77 @@ export default function Landing() {
       <section id="about" className="py-32 relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-teal-500 rounded-2xl transform rotate-3 scale-105 opacity-20 group-hover:rotate-6 transition-all duration-500"></div>
-              <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-slate-900 aspect-square flex flex-col justify-center items-center p-8 text-center transition-transform duration-500 group-hover:-translate-y-2">
-                <div className="w-24 h-24 rounded-full bg-emerald-500/10 flex items-center justify-center mb-8 border border-emerald-500/20">
-                  <Zap className="w-10 h-10 text-emerald-400" />
-                </div>
-                <h3 className="text-2xl font-bold text-white mb-4">Built for the Critical Path</h3>
-                <p className="text-slate-400 leading-relaxed">
-                  Project CURA replaces fragmented communication channels with a unified, encrypted platform built explicitly for high-stress emergency response environments.
-                </p>
-                <div className="mt-8 p-4 rounded-xl bg-slate-950/50 border border-white/5 w-full">
-                  <div className="flex items-center justify-between text-sm mb-2">
-                    <span className="text-slate-400">Response Time Improvement</span>
-                    <span className="text-emerald-400 font-bold">+40%</span>
+            <div className="relative group select-none">
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-teal-500 rounded-2xl transform rotate-3 scale-105 opacity-20 group-hover:rotate-6 transition-all duration-500 pointer-events-none"></div>
+              <div
+                className="relative rounded-2xl overflow-hidden border border-white/10 bg-slate-900 flex flex-col transition-transform duration-500 group-hover:-translate-y-2"
+                onTouchStart={onCarouselTouchStart}
+                onTouchEnd={onCarouselTouchEnd}
+              >
+                {/* Slide content */}
+                {(() => {
+                  const slide = overviewSlides[carouselIdx];
+                  const SlideIcon = slide.icon;
+                  return (
+                    <div className={`flex flex-col justify-center items-center p-8 text-center transition-all duration-300 ${slideVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}>
+                      <div className="mb-4">
+                        <span className="text-xs font-bold tracking-widest text-emerald-500 uppercase bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">
+                          {slide.tag}
+                        </span>
+                      </div>
+                      <div className="w-20 h-20 rounded-full bg-emerald-500/10 flex items-center justify-center mb-6 border border-emerald-500/20">
+                        <SlideIcon className="w-8 h-8 text-emerald-400" />
+                      </div>
+                      <h3 className="text-xl font-bold text-white mb-3">{slide.title}</h3>
+                      <p className="text-slate-400 leading-relaxed text-sm">{slide.desc}</p>
+                      <div className="mt-6 p-4 rounded-xl bg-slate-950/50 border border-white/5 w-full">
+                        <div className="flex items-center justify-between text-sm mb-2">
+                          <span className="text-slate-400">{slide.metric.label}</span>
+                          <span className="text-emerald-400 font-bold">{slide.metric.value}</span>
+                        </div>
+                        <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-500 rounded-full transition-all duration-700"
+                            style={{ width: slide.metric.width, boxShadow: '0 0 10px rgba(16,185,129,0.8)' }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Navigation bar */}
+                <div className="px-8 pb-6 flex items-center justify-between gap-4">
+                  <button
+                    onClick={prevCarousel}
+                    className="w-8 h-8 rounded-full border border-white/10 bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white hover:border-emerald-500/40 hover:bg-emerald-500/10 transition-all duration-200 shrink-0"
+                    aria-label="Previous slide"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+
+                  <div className="flex gap-1.5 items-center">
+                    {overviewSlides.map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => changeSlide(i)}
+                        className={`rounded-full transition-all duration-300 ${
+                          i === carouselIdx
+                            ? 'w-5 h-2 bg-emerald-500'
+                            : 'w-2 h-2 bg-slate-600 hover:bg-slate-400'
+                        }`}
+                        aria-label={`Go to slide ${i + 1}`}
+                      />
+                    ))}
                   </div>
-                  <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-500 w-[85%] rounded-full shadow-[0_0_10px_rgba(16,185,129,0.8)]"></div>
-                  </div>
+
+                  <button
+                    onClick={nextCarousel}
+                    className="w-8 h-8 rounded-full border border-white/10 bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white hover:border-emerald-500/40 hover:bg-emerald-500/10 transition-all duration-200 shrink-0"
+                    aria-label="Next slide"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </div>

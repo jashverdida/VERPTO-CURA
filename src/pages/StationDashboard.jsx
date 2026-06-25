@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MapContainer from '../components/MapContainer';
+import IncidentDetailModal from '../components/IncidentDetailModal';
 import {
   Squares2X2Icon,
   BellAlertIcon,
@@ -45,10 +46,17 @@ const INITIAL_DISPATCH_QUEUE = [
     title: 'Structural Fire — Commercial Building',
     location: 'Ayala Center Cebu, Cardinal Rosales Ave',
     reported: '2 min ago',
+    time: '2 min ago',
+    status: 'CODE RED',
     priority: 'CODE RED',
+    alarmLevel: 4,
     aiConfidence: 94,
-    aiNote: 'Thermal signature confirmed. Multi-floor spread probability high.',
+    aiNote: 'Thermal signature confirmed. Multi-floor spread probability high. Structural collapse risk: 78% within 20 min.',
     requiredUnits: 2,
+    units: [],
+    structureType: 'Multi-level Commercial Mall — 6 Floors',
+    reportedBy: 'CURA AI Thermal Network + Security Personnel',
+    description: 'Active fire in Ayala Center Cebu Level 4 parking area. Thermal signatures indicate multi-floor spread on floors 4–6. Full evacuation in progress.',
   },
   {
     id: 'DSP-2026-042',
@@ -56,10 +64,24 @@ const INITIAL_DISPATCH_QUEUE = [
     title: 'Cardiac Emergency — Office Tower',
     location: 'IT Park Ave & Gov. Cuenco Ave, Lahug',
     reported: '5 min ago',
+    time: '5 min ago',
+    status: 'CODE 2',
     priority: 'CODE 2',
+    alarmLevel: null,
     aiConfidence: 87,
     aiNote: 'NLP voice analysis: distress markers and medical terminology detected.',
     requiredUnits: 1,
+    units: [],
+    reportedBy: 'CURA NLP Emergency Hotline Analysis',
+    chiefComplaint: 'Suspected cardiac event — chest pain and collapse reported',
+    triageData: [
+      { q: 'Is the patient conscious?',    a: 'Unknown — caller reports victim collapsed suddenly' },
+      { q: 'Is CPR being performed?',      a: 'Yes — bystander performing CPR per dispatcher guidance' },
+      { q: 'Age and sex?',                 a: 'Male, approximately 45–55 years old' },
+      { q: 'Any known medical history?',   a: 'Unknown at this time' },
+      { q: 'Time of onset?',               a: 'Approximately 5 minutes before call' },
+    ],
+    vitals: { hr: '--', bp: '--', spo2: '--', rr: '--' },
   },
   {
     id: 'DSP-2026-043',
@@ -67,10 +89,18 @@ const INITIAL_DISPATCH_QUEUE = [
     title: 'Multi-Vehicle Collision w/ Entrapment',
     location: 'CCLEX Approach, North Reclamation Area',
     reported: '9 min ago',
+    time: '9 min ago',
+    status: 'CODE 2',
     priority: 'CODE 2',
+    alarmLevel: null,
     aiConfidence: 76,
     aiNote: 'Image analysis inconclusive. Manual verification recommended before deploy.',
     requiredUnits: 2,
+    units: [],
+    vehicleType: 'Sedan, Van (2 vehicles — entrapment reported)',
+    casualties: 'Entrapment confirmed — casualty count unknown',
+    reportedBy: 'CCLEX Toll Operator + CURA AI CCTV',
+    description: 'Two vehicles collided on the CCLEX approach. One driver reported trapped inside. AI image analysis inconclusive — manual dispatch and on-scene assessment required.',
   },
 ];
 
@@ -196,10 +226,10 @@ const MAP_UNITS = [
 ];
 
 const MAP_INCIDENT_CONFIG = {
-  fire:     { color: '#EF4444' },
-  medical:  { color: '#3B82F6' },
-  accident: { color: '#F59E0B' },
-  rescue:   { color: '#8B5CF6' },
+  fire:     { color: '#EF4444', icon: FireIcon        },
+  medical:  { color: '#3B82F6', icon: HeartIcon       },
+  accident: { color: '#F59E0B', icon: TruckIcon       },
+  rescue:   { color: '#8B5CF6', icon: ShieldCheckIcon },
 };
 
 const SECTOR_STATS = [
@@ -282,6 +312,7 @@ export default function StationDashboard() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [dispatchQueue, setDispatchQueue] = useState(INITIAL_DISPATCH_QUEUE);
   const [fleet, setFleet] = useState(INITIAL_FLEET);
+  const [detailDispatch, setDetailDispatch] = useState(null);
   const [toast, setToast] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -453,9 +484,10 @@ export default function StationDashboard() {
             return (
               <div
                 key={d.id}
-                className={`bg-white border rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow ${
+                className={`bg-white border rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer ${
                   d.priority === 'CODE RED' ? 'border-red-200 ring-1 ring-red-100' : 'border-slate-200'
                 }`}
+                onClick={() => setDetailDispatch(d)}
               >
                 <div className="flex items-start gap-3 mb-3">
                   <div className="flex items-start space-x-3">
@@ -491,11 +523,11 @@ export default function StationDashboard() {
                     Requires <span className="font-bold text-slate-700">{d.requiredUnits}</span> unit{d.requiredUnits > 1 ? 's' : ''}
                   </span>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => handleDeclineDispatch(d.id)} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors">
+                    <button onClick={(e) => { e.stopPropagation(); handleDeclineDispatch(d.id); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors">
                       Decline
                     </button>
                     <button
-                      onClick={() => handleAcceptDispatch(d)}
+                      onClick={(e) => { e.stopPropagation(); handleAcceptDispatch(d); }}
                       className={`px-4 py-1.5 rounded-lg text-xs font-bold text-white transition-all duration-200 hover:scale-105 active:scale-95 shadow-sm ${
                         d.priority === 'CODE RED' ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'
                       }`}
@@ -1025,6 +1057,7 @@ export default function StationDashboard() {
       {/* ── Incident Pins ── */}
       {MAP_INCIDENTS.map((pin) => {
         const cfg = MAP_INCIDENT_CONFIG[pin.type] || MAP_INCIDENT_CONFIG.fire;
+        const PinIcon = cfg.icon;
         const isBottom = pin.y > 60;
         return (
           <div
@@ -1032,17 +1065,20 @@ export default function StationDashboard() {
             className="absolute z-10"
             style={{ left: `${pin.x}%`, top: `${pin.y}%`, transform: 'translate(-50%, -50%)' }}
           >
-            {/* Outer pulse ring */}
-            <div className="relative flex items-center justify-center w-6 h-6">
+            {/* Badge marker — circle + icon, same style as command center */}
+            <div className="relative flex items-center justify-center w-11 h-11">
+              {/* Pulse ring */}
               <span
-                className="absolute inline-flex w-6 h-6 rounded-full animate-ping opacity-60"
+                className="absolute inline-flex w-11 h-11 rounded-full animate-ping opacity-40"
                 style={{ backgroundColor: cfg.color }}
               />
-              {/* Inner dot */}
-              <span
-                className="relative inline-flex w-4 h-4 rounded-full border-2 border-white shadow-lg"
-                style={{ backgroundColor: cfg.color, boxShadow: `0 0 12px ${cfg.color}99` }}
-              />
+              {/* Badge circle */}
+              <div
+                className="relative w-10 h-10 rounded-full flex items-center justify-center border-2 border-white shadow-xl"
+                style={{ backgroundColor: cfg.color, boxShadow: `0 0 16px ${cfg.color}99` }}
+              >
+                <PinIcon className="w-5 h-5 text-white" strokeWidth={1.8} />
+              </div>
             </div>
             {/* Label card — flips above if near bottom */}
             <div
@@ -1071,20 +1107,22 @@ export default function StationDashboard() {
           className="absolute z-20"
           style={{ left: `${unit.x}%`, top: `${unit.y}%`, transform: 'translate(-50%, -50%)' }}
         >
-          <div className="relative flex items-center justify-center">
+          <div className="relative flex items-center justify-center w-9 h-9">
             {unit.status === 'en-route' && (
               <span
-                className="absolute w-5 h-5 rounded-sm rotate-45 animate-ping opacity-50"
+                className="absolute w-9 h-9 rounded-full animate-ping opacity-40"
                 style={{ backgroundColor: unit.color }}
               />
             )}
             <div
-              className="relative w-4 h-4 rounded-sm rotate-45 border-2 border-white shadow-xl"
-              style={{ backgroundColor: unit.color, boxShadow: `0 0 10px ${unit.color}88` }}
-            />
+              className="relative w-8 h-8 rounded-full flex items-center justify-center border-2 border-white shadow-xl"
+              style={{ backgroundColor: unit.color, boxShadow: `0 0 12px ${unit.color}88` }}
+            >
+              <TruckIcon className="w-4 h-4 text-white" strokeWidth={1.8} />
+            </div>
           </div>
           <div
-            className="absolute top-5 left-1/2 -translate-x-1/2 text-[10px] font-bold px-2 py-0.5 rounded border whitespace-nowrap shadow"
+            className="absolute top-9 left-1/2 -translate-x-1/2 text-[10px] font-bold px-2 py-0.5 rounded border whitespace-nowrap shadow"
             style={{ backgroundColor: 'rgba(10,18,32,0.9)', color: unit.color, borderColor: `${unit.color}44` }}
           >
             {unit.label}
@@ -1097,10 +1135,13 @@ export default function StationDashboard() {
         className="absolute z-10"
         style={{ left: '12%', top: '82%', transform: 'translate(-50%, -50%)' }}
       >
-        <div className="w-5 h-5 rounded-full bg-emerald-500 border-2 border-white shadow-lg flex items-center justify-center" style={{ boxShadow: '0 0 14px #10B98166' }}>
-          <BuildingOfficeIcon className="w-3 h-3 text-white" />
+        <div className="relative flex items-center justify-center w-9 h-9">
+          <span className="absolute w-9 h-9 rounded-full animate-ping opacity-30 bg-emerald-500" />
+          <div className="relative w-8 h-8 rounded-full bg-emerald-500 border-2 border-white shadow-xl flex items-center justify-center" style={{ boxShadow: '0 0 14px #10B98166' }}>
+            <BuildingOfficeIcon className="w-4 h-4 text-white" />
+          </div>
         </div>
-        <div className="absolute top-5 left-1/2 -translate-x-1/2 text-[10px] font-black px-2 py-0.5 rounded border whitespace-nowrap shadow" style={{ backgroundColor: 'rgba(10,18,32,0.9)', color: '#34D399', borderColor: '#10B98144' }}>
+        <div className="absolute top-9 left-1/2 -translate-x-1/2 text-[10px] font-black px-2 py-0.5 rounded border whitespace-nowrap shadow" style={{ backgroundColor: 'rgba(10,18,32,0.9)', color: '#34D399', borderColor: '#10B98144' }}>
           STN 4 BASE
         </div>
       </div>
@@ -1233,25 +1274,28 @@ export default function StationDashboard() {
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2.5">Legend</p>
           <div className="space-y-2">
             {[
-              { color: '#EF4444', label: 'Fire Incident' },
-              { color: '#3B82F6', label: 'Medical Emergency' },
-              { color: '#F59E0B', label: 'Road Accident' },
-              { color: '#8B5CF6', label: 'Rescue Operation' },
-            ].map(({ color, label }) => (
+              { color: '#EF4444', label: 'Fire Incident',     Icon: FireIcon        },
+              { color: '#3B82F6', label: 'Medical Emergency', Icon: HeartIcon       },
+              { color: '#F59E0B', label: 'Road Accident',     Icon: TruckIcon       },
+              { color: '#8B5CF6', label: 'Rescue Operation',  Icon: ShieldCheckIcon },
+            ].map(({ color, label, Icon }) => (
               <div key={label} className="flex items-center space-x-2.5">
-                <div className="relative flex items-center justify-center w-3.5 h-3.5">
-                  <span className="absolute w-3.5 h-3.5 rounded-full opacity-40" style={{ backgroundColor: color }} />
-                  <span className="relative w-2.5 h-2.5 rounded-full border border-white/40" style={{ backgroundColor: color }} />
+                <div className="w-5 h-5 rounded-full border border-white/30 flex items-center justify-center flex-shrink-0" style={{ backgroundColor: color }}>
+                  <Icon className="w-3 h-3 text-white" strokeWidth={2} />
                 </div>
                 <span className="text-[11px] text-slate-400">{label}</span>
               </div>
             ))}
             <div className="border-t border-slate-800/60 pt-2 flex items-center space-x-2.5">
-              <div className="w-3 h-3 rounded-sm rotate-45 flex-shrink-0 bg-emerald-500 border border-white/30" />
+              <div className="w-5 h-5 rounded-full bg-blue-500 border border-white/30 flex items-center justify-center flex-shrink-0">
+                <TruckIcon className="w-3 h-3 text-white" strokeWidth={2} />
+              </div>
               <span className="text-[11px] text-slate-400">Deployed Unit</span>
             </div>
             <div className="flex items-center space-x-2.5">
-              <div className="w-3 h-3 rounded-full flex-shrink-0 bg-emerald-500 border border-white/30" />
+              <div className="w-5 h-5 rounded-full bg-emerald-500 border border-white/30 flex items-center justify-center flex-shrink-0">
+                <BuildingOfficeIcon className="w-3 h-3 text-white" strokeWidth={2} />
+              </div>
               <span className="text-[11px] text-slate-400">Station Base</span>
             </div>
           </div>
@@ -1335,7 +1379,11 @@ export default function StationDashboard() {
 
           {/* Map */}
           <div className="flex-1 min-w-0 min-h-0">
-            <MapContainer />
+            <MapContainer
+              stationLocation={{ lat: 10.3260, lng: 123.9090 }}
+              jurisdictionRadius={3000}
+              stationName="Station 4 — Mabolo"
+            />
           </div>
 
           {/* Right panel: filtered dispatch queue */}
@@ -1371,7 +1419,7 @@ export default function StationDashboard() {
                   const IconComp = tc.icon;
                   const cc = confidenceColor(d.aiConfidence);
                   return (
-                    <div key={d.id} className={`border rounded-xl p-3 shadow-sm ${d.priority === 'CODE RED' ? 'border-red-200 ring-1 ring-red-100 bg-red-50/30' : 'border-slate-200 bg-white'}`}>
+                    <div key={d.id} className={`border rounded-xl p-3 shadow-sm cursor-pointer hover:shadow-md transition-shadow ${d.priority === 'CODE RED' ? 'border-red-200 ring-1 ring-red-100 bg-red-50/30' : 'border-slate-200 bg-white'}`} onClick={() => setDetailDispatch(d)}>
                       <div className="flex items-start space-x-2.5 mb-2.5">
                         <div className={`w-8 h-8 rounded-lg ${tc.bg} ${tc.border} border flex items-center justify-center flex-shrink-0`}>
                           <IconComp className={`w-4 h-4 ${tc.color}`} />
@@ -1404,11 +1452,11 @@ export default function StationDashboard() {
                           <span className="font-bold text-slate-700">{d.requiredUnits}</span> unit{d.requiredUnits > 1 ? 's' : ''} needed
                         </span>
                         <div className="flex items-center gap-1.5">
-                          <button onClick={() => handleDeclineDispatch(d.id)} className="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors">
+                          <button onClick={(e) => { e.stopPropagation(); handleDeclineDispatch(d.id); }} className="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors">
                             Decline
                           </button>
                           <button
-                            onClick={() => handleAcceptDispatch(d)}
+                            onClick={(e) => { e.stopPropagation(); handleAcceptDispatch(d); }}
                             className={`px-3 py-1 rounded-lg text-xs font-bold text-white transition-all duration-200 hover:scale-105 active:scale-95 ${d.priority === 'CODE RED' ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}
                           >
                             Accept & Deploy
@@ -1463,12 +1511,160 @@ export default function StationDashboard() {
     );
   };
 
+  // ── Full-Width Dispatch Page ──────────────────────────────────────────────────
+
+  const renderDispatchesPage = () => (
+    <div className="flex flex-col h-full overflow-hidden">
+
+      {/* Page Header */}
+      <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm">
+        <div className="flex items-center space-x-3">
+          <div className="w-9 h-9 bg-red-50 border border-red-200 rounded-xl flex items-center justify-center">
+            <BellAlertIcon className="w-5 h-5 text-red-600" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-800">Active Dispatches</h2>
+            <p className="text-xs text-slate-500">AI-verified · Auto-prioritized by risk score · Station 4 — Mabolo</p>
+          </div>
+        </div>
+        <div className="flex items-center space-x-3">
+          {dispatchQueue.length > 0 && (
+            <span className="px-3 py-1.5 bg-red-50 border border-red-200 text-red-700 text-xs font-bold rounded-full animate-pulse">
+              {dispatchQueue.length} pending
+            </span>
+          )}
+          <div className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+            <span className="text-xs font-semibold text-emerald-700">Station Online</span>
+          </div>
+          <button className="p-2 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors">
+            <ArrowPathIcon className="w-4 h-4 text-slate-500" />
+          </button>
+        </div>
+      </div>
+
+      {/* KPI Strip */}
+      <div className="flex-shrink-0 grid grid-cols-4 gap-4 px-6 py-4 bg-slate-50 border-b border-slate-200">
+        {[
+          { label: 'Pending Dispatches', value: dispatchQueue.length, sub: 'awaiting station action', accentHex: dispatchQueue.length > 0 ? '#EF4444' : '#10B981', pulse: dispatchQueue.length > 0 },
+          { label: 'Fleet Available',    value: `${availableCount}/${fleet.length}`, sub: 'units ready at base',  accentHex: '#10B981' },
+          { label: 'Deployed Units',     value: deployedCount, sub: 'currently in field',       accentHex: '#3B82F6' },
+          { label: 'Personnel On-Duty',  value: `${onDutyCount}/${PERSONNEL.length}`, sub: 'active this shift',  accentHex: '#8B5CF6' },
+        ].map(({ label, value, sub, accentHex, pulse }) => (
+          <div key={label} className="bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm flex items-center space-x-3 hover:shadow-md transition-shadow" style={{ borderLeftWidth: '4px', borderLeftColor: accentHex }}>
+            <div className="min-w-0">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold truncate">{label}</p>
+              <p className={`text-2xl font-black text-slate-800 leading-none mt-1 ${pulse ? 'text-red-600' : ''}`}>{value}</p>
+              <p className="text-xs text-slate-400 mt-1 truncate">{sub}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Main Body */}
+      <div className="flex-1 flex gap-5 px-6 py-5 min-h-0 overflow-hidden">
+
+        {/* Dispatch Cards — left main area */}
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          {dispatchQueue.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <CheckCircleSolid className="w-14 h-14 text-emerald-400 mb-3" />
+              <p className="text-slate-700 font-bold text-lg">Queue Clear</p>
+              <p className="text-slate-400 text-sm mt-1">No pending dispatches. Station is standby-ready.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 overflow-y-auto pr-1">
+              {dispatchQueue.map((d) => {
+                const tc = typeConfig[d.type] || typeConfig.fire;
+                const IconComp = tc.icon;
+                const cc = confidenceColor(d.aiConfidence);
+                return (
+                  <div
+                    key={d.id}
+                    className={`bg-white border rounded-2xl p-5 shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer ${
+                      d.priority === 'CODE RED' ? 'border-red-200 ring-1 ring-red-100' : 'border-slate-200'
+                    }`}
+                    onClick={() => setDetailDispatch(d)}
+                  >
+                    {/* Card Header */}
+                    <div className="flex items-start gap-4 mb-4">
+                      <div className={`w-11 h-11 rounded-xl ${tc.bg} ${tc.border} border flex items-center justify-center flex-shrink-0`}>
+                        <IconComp className={`w-6 h-6 ${tc.color}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className={`text-xs font-black px-2.5 py-1 rounded-lg ${priorityConfig[d.priority]}`}>{d.priority}</span>
+                          <span className="text-xs text-slate-400 font-mono bg-slate-100 px-2 py-0.5 rounded">{d.id}</span>
+                          <span className="text-xs text-slate-400">{d.reported}</span>
+                        </div>
+                        <p className="text-sm font-bold text-slate-800 leading-snug">{d.title}</p>
+                        <div className="flex items-center space-x-1 mt-1">
+                          <MapPinIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                          <p className="text-xs text-slate-500 truncate">{d.location}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* AI Confidence */}
+                    <div className={`rounded-xl px-4 py-3 border mb-4 ${cc.bg}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">AI Confidence</span>
+                        <span className={`text-sm font-black ${cc.text}`}>{d.aiConfidence}%</span>
+                      </div>
+                      <div className="w-full bg-white/60 rounded-full h-2 mb-2">
+                        <div className={`h-2 rounded-full ${cc.bar} transition-all duration-700`} style={{ width: `${d.aiConfidence}%` }} />
+                      </div>
+                      <p className="text-xs text-slate-600 italic">{d.aiNote}</p>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs text-slate-500">
+                        Requires <span className="font-bold text-slate-700">{d.requiredUnits}</span> unit{d.requiredUnits > 1 ? 's' : ''}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeclineDispatch(d.id); }}
+                          className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors"
+                        >
+                          Decline
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleAcceptDispatch(d); }}
+                          className={`px-5 py-1.5 rounded-lg text-xs font-bold text-white transition-all duration-200 hover:scale-105 active:scale-95 shadow-sm ${
+                            d.priority === 'CODE RED' ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'
+                          }`}
+                        >
+                          Accept & Deploy
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Right Sidebar */}
+        <div className="w-80 flex-shrink-0 space-y-4 overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            {renderFleet()}
+          </div>
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            {renderRoster()}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   // ── Tab Content Router ────────────────────────────────────────────────────────
 
   const renderTabContent = () => {
     switch (activeTab) {
       case 'overview':   return renderOverview();
-      case 'dispatches': return <div className="max-w-2xl mx-auto h-full">{renderDispatchQueue()}</div>;
+      case 'dispatches': return renderDispatchesPage();
       case 'responders': return (
         <div className="flex gap-5 h-full">
           <div className="flex-1 min-w-0 flex flex-col">{renderDispatchQueue()}</div>
@@ -1492,6 +1688,14 @@ export default function StationDashboard() {
 
   return (
     <div className="flex h-screen bg-slate-100 font-inter overflow-hidden">
+
+      {/* Incident Detail Modal */}
+      {detailDispatch && (
+        <IncidentDetailModal
+          report={detailDispatch}
+          onClose={() => setDetailDispatch(null)}
+        />
+      )}
 
       {/* Toast */}
       {toast && (
@@ -1812,8 +2016,8 @@ export default function StationDashboard() {
         )}
 
         {/* Tab Content */}
-        <div className={`flex-1 overflow-hidden ${activeTab === 'jurisdiction' || isIncidentTab || activeTab === 'chat' ? '' : 'px-6 pb-6 pt-4'}`}>
-          <div className={`h-full ${activeTab === 'jurisdiction' || isIncidentTab || activeTab === 'chat' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+        <div className={`flex-1 overflow-hidden ${activeTab === 'jurisdiction' || isIncidentTab || activeTab === 'chat' || activeTab === 'dispatches' ? '' : 'px-6 pb-6 pt-4'}`}>
+          <div className={`h-full ${activeTab === 'jurisdiction' || isIncidentTab || activeTab === 'chat' || activeTab === 'dispatches' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
             {renderTabContent()}
           </div>
         </div>

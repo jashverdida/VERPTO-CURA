@@ -8,8 +8,10 @@ import {
   Platform,
   StatusBar,
   Image,
+  ActivityIndicator,
 } from 'react-native';
-import MapView, { Marker, Callout, PROVIDER_GOOGLE } from 'react-native-maps';
+
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -47,67 +49,45 @@ const TYPE_ICON = {
   SEARCH_RESCUE: 'search',
 };
 
-// ── Incident callout card ─────────────────────────────────────────────────────
-// react-native-maps View-child bitmap capture is broken in this environment —
-// even a plain 52×52 circle with no stem still showed partial. Root cause:
-// the Google Maps native renderer on Android doesn't composite React Native
-// View bitmaps reliably in this SDK/device combination.
-//
-// Solution: use native pinColor (always renders correctly) + a styled Callout
-// that shows the icon, type label, address and time on tap.
-function IncidentCallout({ inc }) {
+// Local placeholder images for each camera-report type
+const INCIDENT_IMAGE = {
+  FIRE:    require('../assets/fire-incident.png'),
+  VEHICLE: require('../assets/vehicular-accident.png'),
+};
+
+// Fallback triage Q&A shown when no real assessment is stored yet
+const DUMMY_TRIAGE_QA = {
+  MEDICAL: [
+    { q: 'What best describes the situation?',    a: 'Chest Pain / Heart Attack' },
+    { q: 'Is the patient currently conscious?',   a: 'Conscious — fully awake' },
+    { q: 'Approximate age of the patient?',       a: 'Adult (18–60 years)' },
+  ],
+  HAZMAT: [
+    { q: 'What type of hazardous material incident?', a: 'Gas Leak (LPG / Industrial)' },
+    { q: 'What is the scale of the spill?',           a: 'Medium — street / compound level' },
+    { q: 'Is there a fire or explosion risk?',        a: 'Yes — evacuate immediately' },
+  ],
+  SEARCH_RESCUE: [
+    { q: 'What type of rescue situation?',  a: 'Person trapped / structural collapse' },
+    { q: 'How many people are involved?',   a: '1–3 people' },
+    { q: 'Is the area safe to approach?',   a: 'Limited access — debris blocking' },
+  ],
+};
+
+// Native pinColor marker — always renders correctly on Android (no bitmap snapshot).
+// The icon badge, glow ring, and tap handling are all in the React Native overlay
+// below the MapView, positioned via pointForCoordinate() which is rotation/tilt-aware.
+function IncidentMarker({ inc }) {
   const key   = (inc.type ?? '').toUpperCase();
   const color = TYPE_COLOR[key] ?? '#6B7280';
-  const icon  = TYPE_ICON[key]  ?? 'warning';
   return (
-    <View style={calloutStyles.wrap}>
-      <View style={[calloutStyles.badge, { backgroundColor: color }]}>
-        <Ionicons name={icon} size={18} color="#fff" />
-      </View>
-      <View style={calloutStyles.info}>
-        <Text style={[calloutStyles.type, { color }]}>
-          {key.replace('_', ' ')}
-        </Text>
-        <Text style={calloutStyles.address} numberOfLines={2}>
-          {inc.address || 'Unknown location'}
-        </Text>
-        <Text style={calloutStyles.time}>{formatTime(inc.created_at)}</Text>
-      </View>
-    </View>
+    <Marker
+      coordinate={{ latitude: inc.lat, longitude: inc.lng }}
+      pinColor={color}
+      tracksViewChanges={false}
+    />
   );
 }
-
-const calloutStyles = StyleSheet.create({
-  wrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 10,
-    gap: 10,
-    width: 220,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  badge: {
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  info: { flex: 1 },
-  type: {
-    fontSize: 11, fontWeight: '800', letterSpacing: 0.5,
-    textTransform: 'uppercase', marginBottom: 2,
-  },
-  address: {
-    fontSize: 12, fontWeight: '600', color: '#1E293B', lineHeight: 16,
-  },
-  time: {
-    fontSize: 11, color: '#94A3B8', fontWeight: '500', marginTop: 2,
-  },
-});
 
 function formatTime(isoString) {
   if (!isoString) return 'Just now';
@@ -122,11 +102,73 @@ export default function MapScreen({ navigation }) {
   const legendAnim    = useRef(new Animated.Value(1)).current;
   const descAnim      = useRef(new Animated.Value(0)).current;
   const mapRef        = useRef(null);
+  const glowAnim      = useRef(new Animated.Value(0.25)).current;
+  const glowScale     = useRef(new Animated.Value(1)).current;
   const [legendVisible, setLegendVisible]   = useState(true);
   const [selectedLegend, setSelectedLegend] = useState(null);
-  // Screen positions for icon badge overlay (React Native Views on top of native pins)
+  // Overlay glow rings — positions resolved via pointForCoordinate (rotation-aware)
   const [pinPositions, setPinPositions] = useState({});
-  const [mapPanning, setMapPanning]     = useState(false);
+  const [isPanning,    setIsPanning]    = useState(false);
+
+  // Incident detail modal
+  const [selectedInc,  setSelectedInc]  = useState(null);
+  const [incDetail,    setIncDetail]    = useState(null);
+  const [modalOpen,    setModalOpen]    = useState(false);
+  const [reporterName, setReporterName] = useState(null);
+  const modalSlide   = useRef(new Animated.Value(320)).current;
+  const modalOpacity = useRef(new Animated.Value(0)).current;
+
+  const openModal = async (inc) => {
+    setSelectedInc(inc);
+    setIncDetail(null);
+    setReporterName(null);
+    setModalOpen(true);
+    Animated.parallel([
+      Animated.spring(modalSlide,   { toValue: 0,   friction: 8, tension: 65, useNativeDriver: true }),
+      Animated.timing(modalOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
+    ]).start();
+
+    // Try to resolve reporter name — citizen_id may not be in schema yet (silent fail)
+    try {
+      const { data: incRow, error: incErr } = await supabase
+        .from('incidents').select('citizen_id').eq('id', inc.id).single();
+      if (!incErr && incRow?.citizen_id) {
+        const { data: cit } = await supabase
+          .from('citizens').select('first_name,last_name').eq('id', incRow.citizen_id).single();
+        if (cit) {
+          const name = `${cit.first_name ?? ''} ${cit.last_name ?? ''}`.trim();
+          if (name) setReporterName(name);
+        }
+      }
+    } catch (_) {}
+
+    const key = (inc.type ?? '').toUpperCase();
+    if (['FIRE', 'VEHICLE'].includes(key)) {
+      const { data } = await supabase.from('camera_reports').select('*').eq('incident_id', inc.id).maybeSingle();
+      let imageUrl = null;
+      if (data?.image_path) {
+        const { data: pub } = supabase.storage.from('camera-reports').getPublicUrl(data.image_path);
+        imageUrl = pub?.publicUrl ?? null;
+      }
+      setIncDetail({ kind: 'camera', ...data, imageUrl });
+    } else {
+      const { data } = await supabase.from('triage_assessments').select('*')
+        .eq('lat', inc.lat).eq('lng', inc.lng).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      setIncDetail({ kind: 'triage', ...data });
+    }
+  };
+
+  const closeModal = () => {
+    Animated.parallel([
+      Animated.timing(modalSlide,   { toValue: 320, duration: 240, useNativeDriver: true }),
+      Animated.timing(modalOpacity, { toValue: 0,   duration: 200, useNativeDriver: true }),
+    ]).start(() => {
+      setModalOpen(false);
+      setSelectedInc(null);
+      setIncDetail(null);
+      setReporterName(null);
+    });
+  };
 
   const toggleLegend = () => {
     if (legendVisible) {
@@ -162,21 +204,42 @@ export default function MapScreen({ navigation }) {
   };
   const [incidents, setIncidents]         = useState([]);
 
-  const updatePinPositions = useCallback(async (currentIncidents) => {
-    if (!mapRef.current) return;
-    const active = (currentIncidents ?? incidents).filter(inc => inc.lat && inc.lng);
-    if (!active.length) return;
-    const positions = {};
-    await Promise.all(active.map(async inc => {
-      try {
-        const pt = await mapRef.current.pointForCoordinate({ latitude: inc.lat, longitude: inc.lng });
-        positions[inc.id] = pt;
-      } catch (_) {}
-    }));
-    setPinPositions(positions);
-  }, [incidents]);
   const [userCoords, setUserCoords]       = useState(null);
   const [locationName, setLocationName]   = useState('Loading...');
+
+  // Pulsing glow animation shared across all overlay rings
+  useEffect(() => {
+    Animated.loop(
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(glowAnim,  { toValue: 0.6,  duration: 900, useNativeDriver: true }),
+          Animated.timing(glowAnim,  { toValue: 0.15, duration: 900, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(glowScale, { toValue: 1.3,  duration: 900, useNativeDriver: true }),
+          Animated.timing(glowScale, { toValue: 1.0,  duration: 900, useNativeDriver: true }),
+        ]),
+      ])
+    ).start();
+  }, []);
+
+  // Uses the native map renderer's own projection (accounts for tilt, rotation, zoom)
+  // to place the pulsing glow overlay rings on top of each composite marker badge.
+  const updateGlowPositions = useCallback(async () => {
+    if (!mapRef.current) return;
+    const active = incidents.filter(inc => inc.lat && inc.lng);
+    if (!active.length) return;
+    const entries = await Promise.all(
+      active.map(async inc => {
+        const pt = await mapRef.current.pointForCoordinate({
+          latitude: inc.lat,
+          longitude: inc.lng,
+        });
+        return [inc.id, pt];
+      })
+    );
+    setPinPositions(Object.fromEntries(entries));
+  }, [incidents]);
 
   // Get device location once and fly the map there
 
@@ -350,9 +413,28 @@ export default function MapScreen({ navigation }) {
     }, [])
   );
 
+  // Re-compute glow ring positions whenever the incidents list changes.
+  // 400 ms delay gives the MapView time to finish its initial tile render
+  // before we query pointForCoordinate.
+  useEffect(() => {
+    if (!incidents.length) return;
+    const t = setTimeout(updateGlowPositions, 400);
+    return () => clearTimeout(t);
+  }, [incidents, updateGlowPositions]);
+
   const handleFabPressIn  = () => Animated.spring(fabScale, { toValue: 0.92, useNativeDriver: true }).start();
   const handleFabPressOut = () => Animated.spring(fabScale, { toValue: 1, friction: 4, useNativeDriver: true }).start();
   const handleFabPress    = () => navigation.navigate('EmergencyType');
+
+  // Derived values for the open modal
+  const selKey   = (selectedInc?.type ?? '').toUpperCase();
+  const selColor = TYPE_COLOR[selKey] ?? '#6B7280';
+  const selIcon  = TYPE_ICON[selKey]  ?? 'warning';
+  const selLabel = selKey.replace(/_/g, ' ') || 'INCIDENT';
+  // Triage Q&A: real data if available, otherwise curated dummy rows
+  const triagePairs = incDetail?.kind === 'triage'
+    ? (incDetail.qa_pairs?.length ? incDetail.qa_pairs.slice(0, 3) : (DUMMY_TRIAGE_QA[selKey] ?? []))
+    : [];
 
   return (
     <View style={styles.container}>
@@ -366,60 +448,75 @@ export default function MapScreen({ navigation }) {
         initialRegion={INITIAL_REGION}
         showsUserLocation
         showsMyLocationButton={false}
-        onMapReady={() => updatePinPositions()}
-        onRegionChange={() => setMapPanning(true)}
-        onRegionChangeComplete={() => { setMapPanning(false); updatePinPositions(); }}
+        onRegionChange={() => setIsPanning(true)}
+        onRegionChangeComplete={() => {
+          setIsPanning(false);
+          updateGlowPositions();
+        }}
       >
-        {incidents.filter(inc => inc.lat && inc.lng).map(inc => {
-          const key = (inc.type ?? '').toUpperCase();
-          const color = TYPE_COLOR[key] ?? '#6B7280';
-          return (
-            <Marker
-              key={inc.id}
-              coordinate={{ latitude: inc.lat, longitude: inc.lng }}
-              pinColor={color}
-            >
-              <Callout tooltip>
-                <IncidentCallout inc={inc} />
-              </Callout>
-            </Marker>
-          );
-        })}
+        {incidents.filter(inc => inc.lat && inc.lng).map(inc => (
+          <IncidentMarker key={inc.id} inc={inc} />
+        ))}
       </MapView>
 
-      {/* ── Icon badges on pin heads ──────────────────────────────────────────
-          React Native Views (not bitmap-captured markers) placed over each
-          native pin's round head using pointForCoordinate screen positions.
-          Hidden during panning so they don't visually lag behind the map. */}
-      {!mapPanning && incidents.filter(inc => inc.lat && inc.lng && pinPositions[inc.id]).map(inc => {
-        const pos = pinPositions[inc.id];
-        const key  = (inc.type ?? '').toUpperCase();
+      {/* ── Icon badge overlay ────────────────────────────────────────────────
+          Rendered as React Native Views above the map so shadows, elevation,
+          and Animated values all work correctly (no Android bitmap snapshot).
+          Positions from pointForCoordinate() — the native renderer's own
+          projection — so they are correct under tilt, rotation, and zoom.
+          Hidden during panning; reappear with fresh coordinates after
+          onRegionChangeComplete. The badge TouchableOpacity opens the modal;
+          the glow ring has pointerEvents="none" so it never blocks touches. */}
+      {!isPanning && incidents.filter(inc => inc.lat && inc.lng && pinPositions[inc.id]).map(inc => {
+        const pos   = pinPositions[inc.id];
+        const key   = (inc.type ?? '').toUpperCase();
         const color = TYPE_COLOR[key] ?? '#6B7280';
         const icon  = TYPE_ICON[key]  ?? 'warning';
+        // Native Google Maps pin head center ≈ 34dp above the coordinate tip.
+        // Container is 60dp; center at pos.y-34 → top = pos.y-34-30 = pos.y-64.
         return (
           <View
-            key={`badge-${inc.id}`}
-            pointerEvents="none"
+            key={`overlay-${inc.id}`}
+            pointerEvents="box-none"
             style={{
               position: 'absolute',
-              left: pos.x - 22,
-              top:  pos.y - 56,   // centered on native pin head
-              width: 44,
-              height: 44,
-              borderRadius: 22,
-              backgroundColor: color,
+              left: pos.x - 30,
+              top:  pos.y - 64,
+              width: 60,
+              height: 60,
               alignItems: 'center',
               justifyContent: 'center',
-              borderWidth: 3,
-              borderColor: 'rgba(255,255,255,0.95)',
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 3 },
-              shadowOpacity: 0.35,
-              shadowRadius: 6,
-              elevation: 10,
             }}
           >
-            <Ionicons name={icon} size={22} color="#fff" />
+            {/* Pulsing glow ring — non-interactive */}
+            <Animated.View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                width: 60, height: 60, borderRadius: 30,
+                backgroundColor: color,
+                opacity: glowAnim,
+                transform: [{ scale: glowScale }],
+              }}
+            />
+            {/* Icon badge — tappable, opens the incident detail modal */}
+            <TouchableOpacity
+              onPress={() => openModal(inc)}
+              activeOpacity={0.85}
+              style={{
+                width: 44, height: 44, borderRadius: 22,
+                backgroundColor: color,
+                alignItems: 'center', justifyContent: 'center',
+                borderWidth: 3, borderColor: '#ffffff',
+                elevation: 10,
+                shadowColor: color,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.6,
+                shadowRadius: 8,
+              }}
+            >
+              <Ionicons name={icon} size={20} color="#fff" />
+            </TouchableOpacity>
           </View>
         );
       })}
@@ -524,6 +621,102 @@ export default function MapScreen({ navigation }) {
           </TouchableOpacity>
         </Animated.View>
       </View>
+
+      {/* ── Incident Info Mini Modal ─────────────────────────────────────────── */}
+      {modalOpen && (
+        <>
+          {/* Dim backdrop — tap to dismiss */}
+          <Animated.View style={[mStyles.backdrop, { opacity: modalOpacity }]}>
+            <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeModal} activeOpacity={1} />
+          </Animated.View>
+
+          {/* Floating card */}
+          <Animated.View style={[mStyles.card, { opacity: modalOpacity, transform: [{ translateY: modalSlide }] }]}>
+            {/* Handle */}
+            <View style={mStyles.handle} />
+
+            {/* Header — type badge + close */}
+            <View style={mStyles.cardHead}>
+              <View style={[mStyles.typeBadge, { backgroundColor: selColor + '1A' }]}>
+                <View style={[mStyles.typeBadgeIcon, { backgroundColor: selColor }]}>
+                  <Ionicons name={selIcon} size={12} color="#fff" />
+                </View>
+                <Text style={[mStyles.typeBadgeTxt, { color: selColor }]}>{selLabel}</Text>
+              </View>
+              <TouchableOpacity onPress={closeModal} style={mStyles.closeBtn} activeOpacity={0.7}>
+                <Ionicons name="close" size={16} color={COLORS.slate500} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Body */}
+            <View style={mStyles.body}>
+              {/* Loading */}
+              {!incDetail && (
+                <View style={mStyles.loadWrap}>
+                  <ActivityIndicator size="small" color={selColor} />
+                  <Text style={mStyles.loadTxt}>Loading details…</Text>
+                </View>
+              )}
+
+              {/* Camera report — FIRE / VEHICLE: always show local asset */}
+              {incDetail?.kind === 'camera' && (
+                <View style={mStyles.imgWrap}>
+                  <Image
+                    source={INCIDENT_IMAGE[selKey] ?? INCIDENT_IMAGE.FIRE}
+                    style={mStyles.img}
+                    resizeMode="cover"
+                  />
+                  {incDetail.ai_hazard_detected && (
+                    <View style={mStyles.aiBadge}>
+                      <Ionicons name="shield-checkmark" size={10} color="#fff" />
+                      <Text style={mStyles.aiBadgeTxt}>AI Verified</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* Triage assessment — MEDICAL / HAZMAT / SEARCH_RESCUE */}
+              {incDetail?.kind === 'triage' && (
+                <View style={mStyles.triageList}>
+                  {triagePairs.length === 0 ? (
+                    <View style={mStyles.triageEmpty}>
+                      <Ionicons name="clipboard-outline" size={22} color={COLORS.slate300} />
+                      <Text style={mStyles.triageEmptyTxt}>No assessment recorded</Text>
+                    </View>
+                  ) : triagePairs.map((pair, i) => (
+                    <View
+                      key={i}
+                      style={[mStyles.qaPair, i > 0 && { borderTopWidth: 1, borderTopColor: COLORS.slate100 }]}
+                    >
+                      <Text style={mStyles.qaQ} numberOfLines={1}>{pair.q}</Text>
+                      <Text style={[mStyles.qaA, { color: selColor }]} numberOfLines={1}>{pair.a}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* Footer — address · time · reporter */}
+            <View style={mStyles.cardFoot}>
+              <View style={mStyles.footRow}>
+                <Ionicons name="location-sharp" size={11} color={COLORS.slate400} />
+                <Text style={mStyles.footTxt} numberOfLines={1}>
+                  {selectedInc?.address || 'Unknown location'}
+                </Text>
+              </View>
+              <View style={[mStyles.footRow, { marginTop: 5 }]}>
+                <Ionicons name="time-outline" size={11} color={COLORS.slate400} />
+                <Text style={mStyles.footTxt}>{formatTime(selectedInc?.created_at)}</Text>
+                <View style={mStyles.footDot} />
+                <Ionicons name="person-circle" size={12} color={COLORS.slate400} />
+                <Text style={[mStyles.footTxt, { flex: 1 }]} numberOfLines={1}>
+                  {reporterName || 'Eijay P. Pepito'}
+                </Text>
+              </View>
+            </View>
+          </Animated.View>
+        </>
+      )}
     </View>
   );
 }
@@ -537,7 +730,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // Callout bubble
   // Top Bar
   topBar: {
     position: 'absolute',
@@ -715,5 +907,175 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: COLORS.white,
     letterSpacing: 0.3,
+  },
+});
+
+// ── Incident mini-modal styles ────────────────────────────────────────────────
+const mStyles = StyleSheet.create({
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15,23,42,0.42)',
+    zIndex: 50,
+  },
+  card: {
+    position: 'absolute',
+    bottom: 92,
+    left: 14,
+    right: 14,
+    backgroundColor: COLORS.white,
+    borderRadius: 22,
+    overflow: 'hidden',
+    zIndex: 51,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.2,
+    shadowRadius: 28,
+    elevation: 18,
+  },
+
+  // Handle bar
+  handle: {
+    alignSelf: 'center',
+    width: 38, height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.slate200,
+    marginTop: 11,
+    marginBottom: 0,
+  },
+
+  // Header
+  cardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 8,
+  },
+  typeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 99,
+  },
+  typeBadgeIcon: {
+    width: 22, height: 22, borderRadius: 11,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  typeBadgeTxt: {
+    fontSize: 11, fontWeight: '800',
+    letterSpacing: 0.6, textTransform: 'uppercase',
+  },
+  closeBtn: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: COLORS.slate100,
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  // Body
+  body: {
+    paddingHorizontal: 14,
+    paddingBottom: 6,
+  },
+
+  // Loading
+  loadWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 18,
+  },
+  loadTxt: {
+    fontSize: 12, color: COLORS.slate400, fontWeight: '500',
+  },
+
+  // Camera / image
+  imgWrap: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  img: {
+    width: '100%', height: 138,
+  },
+  imgPlaceholder: {
+    backgroundColor: COLORS.slate100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  imgPlaceholderTxt: {
+    fontSize: 12, fontWeight: '600',
+  },
+  aiBadge: {
+    position: 'absolute',
+    top: 9, right: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16,185,129,0.88)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 99,
+    gap: 4,
+  },
+  aiBadgeTxt: {
+    fontSize: 10, fontWeight: '700', color: '#fff', letterSpacing: 0.3,
+  },
+
+  // Triage Q&A
+  triageList: {
+    backgroundColor: COLORS.slate50,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.slate100,
+  },
+  triageEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    gap: 7,
+  },
+  triageEmptyTxt: {
+    fontSize: 12, color: COLORS.slate400, fontWeight: '500',
+  },
+  qaPair: {
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+  },
+  qaQ: {
+    fontSize: 9, fontWeight: '700',
+    color: COLORS.slate400,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 3,
+  },
+  qaA: {
+    fontSize: 12, fontWeight: '700',
+  },
+
+  // Footer
+  cardFoot: {
+    paddingHorizontal: 14,
+    paddingTop: 11,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.slate100,
+    marginTop: 10,
+  },
+  footRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  footTxt: {
+    fontSize: 11, fontWeight: '500', color: COLORS.slate500,
+  },
+  footDot: {
+    width: 3, height: 3, borderRadius: 1.5,
+    backgroundColor: COLORS.slate300,
+    marginHorizontal: 3,
   },
 });
