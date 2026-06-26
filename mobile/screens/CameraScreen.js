@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,16 @@ import {
   Image,
   Alert,
 } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Camera, useCameraDevice, useCameraPermission, useFrameProcessor } from 'react-native-vision-camera';
+import { useTensorflowModel } from 'react-native-fast-tflite';
+import { useResizePlugin } from 'vision-camera-resize-plugin';
+import { NitroModules } from 'react-native-nitro-modules';
+import { useSharedValue } from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SHADOWS, BORDER_RADIUS, SPACING } from '../constants/theme';
+import { decodeDetections } from '../ml/detectFrame';
 
 const { width, height } = Dimensions.get('window');
 
@@ -50,6 +55,18 @@ function exifOrientationToRotation(orientation) {
     case 6: return 90;
     case 8: return 270;
     default: return 0;
+  }
+}
+
+// Maps vision-camera's string Orientation to the same numeric EXIF codes
+// exifOrientationToRotation already understands, so prepareImage() can stay
+// unchanged for both the live-camera and gallery-picker call sites.
+function vcOrientationToExif(orientation) {
+  switch (orientation) {
+    case 'landscape-left': return 6;
+    case 'portrait-upside-down': return 3;
+    case 'landscape-right': return 8;
+    default: return 1;
   }
 }
 
@@ -94,7 +111,8 @@ export default function CameraScreen({ navigation, route }) {
   const emergencyType = route.params?.emergencyType ?? 'fire';
 
   const [facing, setFacing] = useState('back');
-  const [permission, requestPermission] = useCameraPermissions();
+  const { hasPermission, requestPermission } = useCameraPermission();
+  const device = useCameraDevice(facing);
   const [screenState, setScreenState] = useState(STATE_CAMERA);
   const [processingText, setProcessingText] = useState('');
   const [torchOn, setTorchOn] = useState(false);
@@ -110,6 +128,33 @@ export default function CameraScreen({ navigation, route }) {
 
   const cameraRef      = useRef(null);
   const phaseTimers    = useRef([]);
+
+  // ── Live on-device detection (Edge AI) ──
+  const objectDetection = useTensorflowModel(require('../assets/models/cura_yolo11s.tflite'), []);
+  const model = objectDetection.state === 'loaded' ? objectDetection.model : undefined;
+  // TfliteModel is a Nitro HybridObject; vision-camera v4's worklet runtime
+  // can't access it directly, so it's boxed here and unboxed inside the
+  // frame processor — see fast-tflite's VisionCamera integration docs.
+  const boxedModel = useMemo(() => (model != null ? NitroModules.box(model) : undefined), [model]);
+  const { resize } = useResizePlugin();
+  const liveDetections = useSharedValue([]);
+
+  const frameProcessor = useFrameProcessor((frame) => {
+    'worklet';
+    if (boxedModel == null) return;
+    const tflite = boxedModel.unbox();
+
+    const resized = resize(frame, {
+      scale: { width: MODEL_SIZE, height: MODEL_SIZE },
+      pixelFormat: 'rgb',
+      dataType: 'float32',
+    });
+    const inputBuffer = resized.buffer.slice(resized.byteOffset, resized.byteOffset + resized.byteLength);
+
+    const outputs = tflite.runSync([inputBuffer]);
+    const output = new Float32Array(outputs[0]);
+    liveDetections.value = decodeDetections(output, CONFIDENCE_THRESHOLD / 100);
+  }, [boxedModel]);
 
   const prepareImage = useCallback(async (uri, exif, origWidth, origHeight) => {
     const rotation = exifOrientationToRotation(exif?.Orientation);
@@ -159,20 +204,8 @@ export default function CameraScreen({ navigation, route }) {
     return dotSequence;
   }, [dotOpacity1, dotOpacity2, dotOpacity3]);
 
-  // ── Permission screens ──
-  if (!permission) {
-    return (
-      <View style={styles.permissionContainer}>
-        <StatusBar barStyle="dark-content" />
-        <View style={styles.loadingContent}>
-          <Ionicons name="camera" size={48} color={COLORS.slate400} />
-          <Text style={styles.permissionText}>Loading camera...</Text>
-        </View>
-      </View>
-    );
-  }
-
-  if (!permission.granted) {
+  // ── Permission screen ──
+  if (!hasPermission) {
     return (
       <View style={styles.permissionContainer}>
         <StatusBar barStyle="dark-content" />
@@ -297,16 +330,19 @@ export default function CameraScreen({ navigation, route }) {
 
     let photo;
     try {
-      photo = await cameraRef.current.takePictureAsync({ quality: 1, exif: true });
+      photo = await cameraRef.current.takePhoto();
     } catch (e) {
       Alert.alert('Capture Failed', 'Could not take photo. Please try again.');
       return;
     }
 
+    const photoUri = `file://${photo.path}`;
+    const exif = { Orientation: vcOrientationToExif(photo.orientation) };
+
     const dotLoop = { current: null };
     startProcessingUI(dotLoop);
-    const preparedBase64 = await prepareImage(photo.uri, photo.exif, photo.width, photo.height);
-    await runDetection(photo.uri, preparedBase64, dotLoop);
+    const preparedBase64 = await prepareImage(photoUri, exif, photo.width, photo.height);
+    await runDetection(photoUri, preparedBase64, dotLoop);
   };
 
   const handleGallery = async () => {
@@ -372,14 +408,25 @@ export default function CameraScreen({ navigation, route }) {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* CameraView fills container; UI lives inside it so Android renders the preview correctly */}
-      <CameraView ref={cameraRef} style={styles.camera} facing={facing} enableTorch={torchOn}>
+      {/* Camera fills container; vision-camera doesn't accept children, so the
+          UI overlay below is a sibling instead of nested inside it */}
+      {device != null && (
+        <Camera
+          ref={cameraRef}
+          style={styles.camera}
+          device={device}
+          isActive={screenState === STATE_CAMERA}
+          photo={true}
+          torch={torchOn ? 'on' : 'off'}
+          frameProcessor={frameProcessor}
+        />
+      )}
 
-        {/* Flash Overlay */}
-        <Animated.View style={[styles.flashOverlay, { opacity: flashAnim }]} pointerEvents="none" />
+      {/* Flash Overlay */}
+      <Animated.View style={[styles.flashOverlay, { opacity: flashAnim }]} pointerEvents="none" />
 
-        {/* ── Camera State ── */}
-        {screenState === STATE_CAMERA && (
+      {/* ── Camera State ── */}
+      {screenState === STATE_CAMERA && (
           <View style={styles.uiOverlay} pointerEvents="box-none">
           {/* Top Controls */}
           <View style={styles.topControls}>
@@ -445,8 +492,7 @@ export default function CameraScreen({ navigation, route }) {
             <Text style={styles.captureLabel}>Tap to Capture · Gallery</Text>
           </View>
         </View>
-        )}
-      </CameraView>
+      )}
 
       {/* ── Processing Overlay ── */}
       {screenState === STATE_PROCESSING && (
