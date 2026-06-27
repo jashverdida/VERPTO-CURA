@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,10 +13,11 @@ import {
   Alert,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission, useFrameProcessor } from 'react-native-vision-camera';
-import { useTensorflowModel } from 'react-native-fast-tflite';
+import { loadTensorflowModel } from 'react-native-fast-tflite';
+import { Asset } from 'expo-asset';
 import { useResizePlugin } from 'vision-camera-resize-plugin';
 import { NitroModules } from 'react-native-nitro-modules';
-import { useSharedValue } from 'react-native-reanimated';
+import Reanimated, { useSharedValue, useAnimatedStyle, useAnimatedReaction, runOnJS } from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
@@ -107,6 +108,106 @@ function getClassColor(className) {
   return map[key] ?? COLORS.emerald;
 }
 
+// Worklet-safe copy of getClassColor (runs on the UI thread inside the
+// animated style); hex literals only so nothing external needs capturing.
+function liveColorFor(className) {
+  'worklet';
+  const key = className ? className.toLowerCase() : '';
+  if (key === 'fire' || key === 'car-accident' || key === 'motorcycle-accident') return '#EF4444';
+  if (key === 'smoke') return '#9CA3AF';
+  if (key === 'car') return '#22C55E';
+  return '#10B981';
+}
+
+// Max simultaneous live boxes. Rules of hooks require a fixed pool, so we
+// render this many and hide the unused ones via opacity.
+const MAX_LIVE_BOXES = 10;
+
+// One animated bounding box, driven entirely from the liveDetections shared
+// value on the UI thread (no React re-render per frame).
+function LiveBox({ index, liveDetections, previewW, previewH }) {
+  const animatedStyle = useAnimatedStyle(() => {
+    const det = liveDetections.value[index];
+    if (det == null) return { opacity: 0, width: 0, height: 0 };
+    // The model sees a centre-crop square (MODEL_SIZE x MODEL_SIZE) of the
+    // camera frame. For a portrait cover-fill preview, map that square to a
+    // centred square spanning the full preview width. The exact crop +
+    // sensor-rotation mapping needs on-device calibration — the emulator
+    // camera is synthetic, so boxes are approximate until tested on hardware.
+    const scale = previewW / MODEL_SIZE;
+    const offsetY = (previewH - previewW) / 2;
+    return {
+      opacity: 1,
+      left:   (det.x - det.width  / 2) * scale,
+      top:    (det.y - det.height / 2) * scale + offsetY,
+      width:  det.width  * scale,
+      height: det.height * scale,
+      borderColor: liveColorFor(det.class),
+    };
+  });
+  return <Reanimated.View pointerEvents="none" style={[styles.boundingBox, animatedStyle]} />;
+}
+
+// Continuous overlay shown while aiming. Boxes update every frame on the UI
+// thread; the text legend is throttled to ~3x/sec via a shared timestamp so
+// it doesn't drive a React re-render on every frame.
+function LiveDetectionOverlay({ liveDetections, previewW, previewH }) {
+  const [legend, setLegend] = useState([]);
+  const lastLegendAt = useSharedValue(0);
+
+  useAnimatedReaction(
+    () => liveDetections.value,
+    (dets) => {
+      const now = Date.now();
+      if (now - lastLegendAt.value < 300) return;
+      lastLegendAt.value = now;
+      // Highest-confidence entry per class, built without Object.values/keys
+      // since those builtins aren't guaranteed in the worklet runtime.
+      const seen = {};
+      const result = [];
+      for (let i = 0; i < dets.length; i++) {
+        const d = dets[i];
+        const k = d.class;
+        if (seen[k] === undefined) {
+          seen[k] = result.length;
+          result.push({ class: d.class, confidence: d.confidence });
+        } else if (d.confidence > result[seen[k]].confidence) {
+          result[seen[k]] = { class: d.class, confidence: d.confidence };
+        }
+      }
+      runOnJS(setLegend)(result);
+    },
+    []
+  );
+
+  const boxes = [];
+  for (let i = 0; i < MAX_LIVE_BOXES; i++) {
+    boxes.push(
+      <LiveBox key={i} index={i} liveDetections={liveDetections} previewW={previewW} previewH={previewH} />
+    );
+  }
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {boxes}
+      {legend.length > 0 && (
+        <View style={styles.liveLegend}>
+          {legend.map((det, i) => {
+            const color = getClassColor(det.class);
+            return (
+              <View key={i} style={[styles.detectionPill, { borderColor: color, backgroundColor: 'rgba(0,0,0,0.55)' }]}>
+                <View style={[styles.pillDot, { backgroundColor: color }]} />
+                <Text style={styles.detPillLabel}>{det.class.toUpperCase()}</Text>
+                <Text style={styles.detPillConfidence}>{Math.round(det.confidence * 100)}%</Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function CameraScreen({ navigation, route }) {
   const emergencyType = route.params?.emergencyType ?? 'fire';
 
@@ -130,8 +231,26 @@ export default function CameraScreen({ navigation, route }) {
   const phaseTimers    = useRef([]);
 
   // ── Live on-device detection (Edge AI) ──
-  const objectDetection = useTensorflowModel(require('../assets/models/cura_yolo11s.tflite'), []);
-  const model = objectDetection.state === 'loaded' ? objectDetection.model : undefined;
+  // Load from a local file URI (via expo-asset) rather than passing require()
+  // straight to fast-tflite: the 36 MB model otherwise streams over Metro's
+  // dev HTTP server on every launch, which is slow and drops mid-transfer on
+  // flaky networks ("unexpected end of stream"). expo-asset downloads it to
+  // disk once and caches it; in a production build localUri is already local.
+  const [model, setModel] = useState(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const asset = Asset.fromModule(require('../assets/models/cura_yolo11s.tflite'));
+        if (!asset.localUri) await asset.downloadAsync();
+        const loaded = await loadTensorflowModel({ url: asset.localUri ?? asset.uri });
+        if (!cancelled) setModel(loaded);
+      } catch (e) {
+        rfLog('On-device model load failed:', e?.message ?? String(e));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
   // TfliteModel is a Nitro HybridObject; vision-camera v4's worklet runtime
   // can't access it directly, so it's boxed here and unboxed inside the
   // frame processor — see fast-tflite's VisionCamera integration docs.
@@ -420,6 +539,11 @@ export default function CameraScreen({ navigation, route }) {
           torch={torchOn ? 'on' : 'off'}
           frameProcessor={frameProcessor}
         />
+      )}
+
+      {/* Live on-device detection overlay (boxes + legend) */}
+      {screenState === STATE_CAMERA && (
+        <LiveDetectionOverlay liveDetections={liveDetections} previewW={width} previewH={height} />
       )}
 
       {/* Flash Overlay */}
@@ -946,6 +1070,15 @@ const styles = StyleSheet.create({
     gap: SPACING.sm, marginBottom: SPACING.sm,
     justifyContent: 'center', alignItems: 'center',
     width: '100%',
+  },
+  liveLegend: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 110 : 96,
+    left: 0, right: 0,
+    flexDirection: 'row', flexWrap: 'wrap',
+    justifyContent: 'center', alignItems: 'center',
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.md,
   },
   detectionPill: {
     flexDirection: 'row', alignItems: 'center',
