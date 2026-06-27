@@ -414,15 +414,32 @@ export default function CameraScreen({ navigation, route }) {
       setApiStatus({ predictionCount: predictions.length, topConfidence, responseTime });
     } catch (e) {
       const responseTime = Date.now() - t0;
-      rfLog(`ERROR (${responseTime}ms):`, e.message);
+      rfLog(`Backend unreachable (${responseTime}ms):`, e.message, '— falling back to on-device Edge AI');
+
+      // Hybrid fallback: when the API can't be reached (e.g. zero
+      // connectivity), use the on-device detections already computed live
+      // from the camera frames. Detection still works fully offline.
+      // These boxes are in the model's 640x640 centre-crop reference frame,
+      // so alignment over the full captured photo is approximate.
+      const allowed = ALLOWED_CLASSES[emergencyType] ?? [];
+      const live = (liveDetections.value ?? []).filter(p =>
+        p.class && allowed.some(c => c.toLowerCase() === p.class?.toLowerCase())
+      );
+      const topConfidence = live.length
+        ? Math.round(Math.max(...live.map(p => p.confidence)) * 100)
+        : null;
+      rfLog(`On-device fallback: ${live.length} detection(s). Top: ${topConfidence ?? '—'}%`);
 
       clearPhaseTimers();
       dotLoop.current && dotLoop.current.stop();
       spinAnim.stopAnimation();
       setCapturedImageUri(uri);
-      setDetections([]);
-      setDetectionError('Could not reach detection service. You can still confirm manually.');
-      setApiStatus({ predictionCount: 0, topConfidence: null, responseTime, error: e.message });
+      setImageNativeSize({ width: MODEL_SIZE, height: MODEL_SIZE });
+      setDetections(live);
+      setDetectionError(
+        live.length ? null : 'Could not reach detection service. You can still confirm manually.'
+      );
+      setApiStatus({ predictionCount: live.length, topConfidence, responseTime, onDevice: true, error: e.message });
     }
     setScreenState(STATE_RESULTS);
   };
